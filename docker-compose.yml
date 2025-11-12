@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  backend:
+    build: ./pepagora-backend
+    container_name: pepagora-backend
+    restart: always
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./pepagora-backend/.env
+
+  frontend:
+    build: ./pepagora-frontend
+    container_name: pepagora-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:4000
+    depends_on:
+      - backend

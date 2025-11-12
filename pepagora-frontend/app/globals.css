@@ -1,0 +1,381 @@
+@import "tailwindcss";
+
+/* Custom CSS Variables for Professional Theme */
+:root {
+  --primary-50: #f0f9ff;
+  --primary-100: #e0f2fe;
+  --primary-200: #bae6fd;
+  --primary-300: #7dd3fc;
+  --primary-400: #38bdf8;
+  --primary-500: #0ea5e9;
+  --primary-600: #0284c7;
+  --primary-700: #0369a1;
+  --primary-800: #075985;
+  --primary-900: #0c4a6e;
+  
+  --secondary-50: #fdf4ff;
+  --secondary-100: #fae8ff;
+  --secondary-200: #f5d0fe;
+  --secondary-300: #f0abfc;
+  --secondary-400: #e879f9;
+  --secondary-500: #d946ef;
+  --secondary-600: #c026d3;
+  --secondary-700: #a21caf;
+  --secondary-800: #86198f;
+  --secondary-900: #701a75;
+  
+  --success-500: #10b981;
+  --warning-500: #f59e0b;
+  --error-500: #ef4444;
+  
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+}
+
+/* Professional Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--gray-100);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gray-400);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-500);
+}
+
+/* Filter Sidebar Scrollbar */
+.filter-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.filter-scrollbar::-webkit-scrollbar-track {
+  background: rgba(248, 250, 252, 0.8);
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.filter-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #cbd5e1, #94a3b8);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.filter-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+/* Smooth animations */
+* {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Professional glass effect */
+.glass-effect {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Modern card shadows */
+.card-shadow {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.card-shadow-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Professional button styles */
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-700), var(--primary-800));
+  transform: translateY(-1px);
+  box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.2);
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, var(--gray-600), var(--gray-700));
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.btn-secondary:hover {
+  background: linear-gradient(135deg, var(--gray-700), var(--gray-800));
+  transform: translateY(-1px);
+}
+
+/* Professional input styles */
+.input-modern {
+  border: 2px solid var(--gray-200);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.input-modern:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+
+/* Professional table styles */
+.table-modern {
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.table-modern th {
+  background: linear-gradient(135deg, var(--gray-50), var(--gray-100));
+  padding: 1rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--gray-700);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.table-modern td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--gray-100);
+  background: white;
+}
+
+.table-modern tbody tr:hover td {
+  background: var(--gray-50);
+}
+
+/* Professional modal overlay */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+/* Loading spinner */
+.spinner {
+  border: 2px solid var(--gray-200);
+  border-top: 2px solid var(--primary-500);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Professional gradient backgrounds */
+.gradient-primary {
+  background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+}
+
+.gradient-secondary {
+  background: linear-gradient(135deg, var(--secondary-600), var(--secondary-700));
+}
+
+.gradient-success {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.gradient-warning {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.gradient-error {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+/* Modern animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Professional focus styles */
+.focus-ring {
+  transition: all 0.2s ease;
+}
+
+.focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-success {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.badge-warning {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge-error {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* Scrollable Meta Columns */
+.meta-scrollable {
+  max-height: 120px;
+  max-width: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+  position: relative;
+}
+
+/* Scroll indicator for meta columns */
+.meta-scrollable::after {
+  content: '⇣';
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.meta-scrollable:hover::after {
+  opacity: 1;
+}
+
+.meta-scrollable.has-overflow::after {
+  opacity: 0.6;
+}
+
+/* Meta Title Scrollbar */
+.meta-title-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.meta-title-scrollable::-webkit-scrollbar-track {
+  background: rgba(239, 246, 255, 0.8);
+  border-radius: 2px;
+}
+
+.meta-title-scrollable::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.meta-title-scrollable::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+}
+
+/* Meta Keywords Scrollbar */
+.meta-keywords-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.meta-keywords-scrollable::-webkit-scrollbar-track {
+  background: rgba(250, 245, 255, 0.8);
+  border-radius: 2px;
+}
+
+.meta-keywords-scrollable::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.meta-keywords-scrollable::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+}
+
+/* Meta Description Scrollbar */
+.meta-description-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.meta-description-scrollable::-webkit-scrollbar-track {
+  background: rgba(240, 253, 244, 0.8);
+  border-radius: 2px;
+}
+
+.meta-description-scrollable::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.meta-description-scrollable::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+}
