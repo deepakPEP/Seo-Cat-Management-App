@@ -5,7 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { CategoryModule } from './category/category.module';
 import { SubcategoryModule } from './subcategory/subcategory.module';
-import { ProductModule } from './product/product.module';
+import { ProductModule } from './productcategories/productcategory.module';
 import { MarketingModule } from './marketing/marketing.module';
 import { DashboardController } from './dashboard/dashboard.controller';
 import { ThrottlerModule } from '@nestjs/throttler';

@@ -350,7 +350,6 @@ export class MarketingService {
             if (productCategoryObjectId && productCount > 0) {
               const products = await liveProductsCollection
                 .find({ 'productCategory._id': productCategoryObjectId }, { projection: { productName: 1 } })
-                .limit(10)
                 .toArray();
               sampleProducts = products
                 .map((product) => product.productName ?? 'Unnamed Product')

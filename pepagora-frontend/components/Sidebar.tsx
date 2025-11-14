@@ -39,7 +39,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       return [
         { 
           href: '/marketing/view-details', 
-          label: 'View Details', 
+          label: 'View Analytics', 
           icon: <FiHome size={20} />,
           gradient: 'from-blue-500 to-blue-600'
         },
@@ -68,9 +68,15 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       },
       { 
         href: '/products', 
-        label: 'Products', 
+        label: 'Product Categories', 
         icon: <FiBox size={20} />,
         gradient: 'from-purple-500 to-purple-600'
+      },
+      { 
+        href: '/marketing/view-details', 
+        label: 'View Analytics', 
+        icon: <FiHome size={20} />,
+        gradient: 'from-blue-500 to-blue-600'
       },
     ];
   };
@@ -142,7 +148,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         })}
 
         {/* Admin Only Section */}
-        {userRole === 'admin' && userRole !== 'marketing_team' && (
+        {userRole === 'admin' && (
           <div className="pt-8 mt-6 border-t border-white/10 space-y-2">
             {!collapsed && (
               <div className="px-4 mb-4">

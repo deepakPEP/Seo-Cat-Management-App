@@ -17,7 +17,7 @@ import { useSearchParams } from 'next/navigation';
 import FilterSidebar from '@/components/FilterSideBar';
 import Loader from "@/components/Loader";
 
-type Product = {
+type ProductCategory = {
   _id: string;
   name: string;
   metaTitle?: string;
@@ -77,7 +77,7 @@ export default function ProductsPage() {
   const router = useRouter();
 
   // data
-  const [products, setProducts] = useState<Product[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -266,7 +266,7 @@ useEffect(()=>{
     setLoading(true);
     try {
       setProductsLoading(true);
-      let endpoint = "/products"; // default
+      let endpoint = "/productcategories"; // default
       const params: any = {
         page: pageToFetch,
         limit,
@@ -274,7 +274,7 @@ useEffect(()=>{
       };
 
       if (selectedCategories.length > 0 || selectedSubcategories.length > 0) {
-        endpoint = "/products/filter"; // use filter route
+        endpoint = "/productcategories/filter"; // use filter route
         // if (selectedCategories.length > 0) {
         //   params.categories = selectedCategories.join(",");
         // }
@@ -290,12 +290,12 @@ useEffect(()=>{
 
       console.log("vgbhjn", res.data.data.data);
 
-      setProducts(items);
+      setProductCategories(items);
       setTotalPages(pagination.totalPages || 1);
       setTotalItems(pagination.totalItems || items.length || 0);
     } catch (err) {
-      console.error("Error fetching products:", err);
-      setProducts([]);
+      console.error("Error fetching product categories:", err);
+      setProductCategories([]);
     } finally {
       setLoading(false);
       setProductsLoading(false);
@@ -305,59 +305,59 @@ useEffect(()=>{
 
   // Generate meta data for all products missing meta info
   const generateMissingMeta = async () => {
-    const productsNeedingMeta = products.filter(p => 
+    const productsNeedingMeta = productCategories.filter(p => 
       !p.metaTitle || !p.metaKeyword || !p.metaDescription
     );
 
     if (productsNeedingMeta.length === 0) {
-      toast.info('All products already have meta data!');
+      toast.info('All product categories already have meta data!');
       return;
     }
 
     const confirmed = window.confirm(
-      `Generate meta data for ${productsNeedingMeta.length} products? This will use AI to create SEO-optimized content.`
+      `Generate meta data for ${productsNeedingMeta.length} product categories? This will use AI to create SEO-optimized content.`
     );
 
     if (!confirmed) return;
 
-    toast.info(`Starting bulk meta generation for ${productsNeedingMeta.length} products...`);
+    toast.info(`Starting bulk meta generation for ${productsNeedingMeta.length} product categories...`);
 
     let successCount = 0;
     let errorCount = 0;
 
-    for (const product of productsNeedingMeta) {
+    for (const productCategory of productsNeedingMeta) {
       try {
-        await generateMetaForProduct(product);
+        await generateMetaForProduct(productCategory);
         successCount++;
         // Add a small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 1500));
       } catch (error: any) {
         errorCount++;
-        console.error(`Failed to generate meta for ${product.name}:`, error);
+        console.error(`Failed to generate meta for ${productCategory.name}:`, error);
       }
     }
 
     if (successCount > 0) {
-      toast.success(`✅ Generated meta data for ${successCount} products.`);
+      toast.success(`✅ Generated meta data for ${successCount} product categories.`);
     }
     if (errorCount > 0) {
-      toast.warning(`⚠️ ${errorCount} products failed to generate meta data.`);
+      toast.warning(`⚠️ ${errorCount} product categories failed to generate meta data.`);
     }
     
     fetchProducts(page); // Refresh the data
   };
 
   // Generate meta data for a specific product
-  const generateMetaForProduct = async (product: Product) => {
+  const generateMetaForProduct = async (productCategory: ProductCategory) => {
     try {
-      const categoryName = product.mappedParent?.mappedParent?.name || '';
-      const subcategoryName = product.mappedParent?.name || '';
+      const categoryName = productCategory.mappedParent?.mappedParent?.name || '';
+      const subcategoryName = productCategory.mappedParent?.name || '';
       
       const prompt = `Generate SEO meta data for this product:
-      Product Name: ${product.name}
+      Product Name: ${productCategory.name}
       Category: ${categoryName}
       Subcategory: ${subcategoryName}
-      ${product.description ? `Description: ${product.description}` : ''}
+      ${productCategory.description ? `Description: ${productCategory.description}` : ''}
       
       Please provide:
       1. Meta Title (max 60 characters)
@@ -406,8 +406,8 @@ useEffect(()=>{
       }
 
       const updatedData: any = { 
-        name: product.name,
-        mappedParent: product.mappedParent?._id
+        name: productCategory.name,
+        mappedParent: productCategory.mappedParent?._id
       };
       
       if (metaTitleMatch) updatedData.metaTitle = metaTitleMatch[1].trim();
@@ -416,13 +416,13 @@ useEffect(()=>{
 
       // Update the product with generated meta data
       console.log('Updating product with data:', updatedData);
-      const updateResponse = await axiosInstance.patch(`/products/${product._id}`, updatedData);
+      const updateResponse = await axiosInstance.patch(`/productcategories/${productCategory._id}`, updatedData);
       
       if (updateResponse.status !== 200) {
         throw new Error(`Failed to update product: ${updateResponse.status}`);
       }
 
-      toast.success(`Meta data generated for ${product.name}!`);
+      toast.success(`Meta data generated for ${productCategory.name}!`);
       fetchProducts(page); // Refresh the data
       
     } catch (error: any) {
@@ -458,7 +458,7 @@ useEffect(()=>{
     e?.preventDefault?.();
     try {
       setLoading(true);
-      await axiosInstance.post('/products', {
+      await axiosInstance.post('/productcategories', {
         name: formName, // required
         mappedParent: formMappedParent || undefined, // only send if selected
         imageUrl: formImageUrl || undefined,         // only send if not empty
@@ -492,7 +492,7 @@ useEffect(()=>{
   };
 
   // start edit
-  const startEdit = (p: Product) => {
+  const startEdit = (p: ProductCategory) => {
     setEditingId(p._id);
     setFormName(p.name || '');
     setFormMappedParent(
@@ -524,7 +524,7 @@ useEffect(()=>{
         description: formDescription || undefined,
       };
 
-      await axiosInstance.patch(`/products/${editingId}`, payload);
+      await axiosInstance.patch(`/productcategories/${editingId}`, payload);
 
       toast.success("Product updated successfully!");
       setShowEditModal(false);
@@ -544,12 +544,12 @@ useEffect(()=>{
     if (!deletingId) return;
     try {
       setLoading(true);
-      await axiosInstance.delete(`/products/${deletingId}`);
+      await axiosInstance.delete(`/productcategories/${deletingId}`);
       toast.success('Deleted');
       setShowDeleteModal(false);
       setDeletingId(null);
       // if last item on page was deleted, move back page
-      if (products.length === 1 && page > 1) {
+      if (productCategories.length === 1 && page > 1) {
         setPage(page - 1);
         fetchProducts(page - 1);
       } else {
@@ -600,8 +600,8 @@ useEffect(()=>{
                     </svg>
                   </div>
                   <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Products</h1>
-                    <p className="text-slate-600 font-medium">Manage your product catalog with advanced features</p>
+                    <h1 className="text-3xl font-bold text-slate-900">Product Categories</h1>
+                    <p className="text-slate-600 font-medium">Manage your product categories with advanced features</p>
                   </div>
                 </div>
               </div>
@@ -627,7 +627,7 @@ useEffect(()=>{
                       className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-blue-500/25 transition-all duration-200 hover:scale-105"
                     >
                       <LuPlus className="w-5 h-5" />
-                      Add Product
+                      Add Product Category
                     </button>
                   </>
                 )}
@@ -645,7 +645,7 @@ useEffect(()=>{
                   </svg>
                   <input
                     type="text"
-                    placeholder="Search products..."
+                    placeholder="Search product categories..."
                     value={searchQuery}
                     onChange={(e) => onSearchChange(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all duration-200"
@@ -688,7 +688,7 @@ useEffect(()=>{
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-blue-700">Total Products</p>
+                  <p className="text-sm font-medium text-blue-700">Total Product Categories</p>
                   <p className="text-2xl font-bold text-blue-900">{totalItems}</p>
                 </div>
               </div>
@@ -718,7 +718,7 @@ useEffect(()=>{
                 <div>
                   <p className="text-sm font-medium text-purple-700">With Meta Data</p>
                   <p className="text-2xl font-bold text-purple-900">
-                    {products.filter(p => p.metaTitle && p.metaDescription).length}
+                    {productCategories.filter(p => p.metaTitle && p.metaDescription).length}
                   </p>
                 </div>
               </div>
@@ -733,7 +733,7 @@ useEffect(()=>{
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">S. NO</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Image</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Product</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Product Category</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Meta Title</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Meta Keywords</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Meta Description</th>
@@ -744,21 +744,21 @@ useEffect(()=>{
                 <tbody className="divide-y divide-slate-200">
                   {loading && Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
 
-                  {!loading && products.length === 0 && (
+                  {!loading && productCategories.length === 0 && (
                     <tr>
                       <td colSpan={isManagerViewOnly ? 6 : 7} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <svg className="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                           </svg>
-                          <p className="text-slate-500 font-medium">No products found</p>
+                          <p className="text-slate-500 font-medium">No product categories found</p>
                           <p className="text-slate-400 text-sm">Try adjusting your search or filters</p>
                         </div>
                       </td>
                     </tr>
                   )}
 
-                  {!loading && products.map((prod, idx) => (
+                  {!loading && productCategories.map((prod, idx) => (
                     <tr key={prod._id} className="hover:bg-slate-50/50 transition-colors duration-200">
                       <td className="px-6 py-4 text-sm font-medium text-slate-900">{(page - 1) * limit + idx + 1}</td>
                       <td className="px-6 py-4">

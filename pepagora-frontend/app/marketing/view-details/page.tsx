@@ -20,16 +20,10 @@ export default function ViewDetailsPage() {
   const [generatingReport, setGeneratingReport] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && userRole !== 'marketing_team') {
-      router.push('/dashboard');
-    }
-  }, [userRole, authLoading, router]);
-
-  useEffect(() => {
-    if (userRole === 'marketing_team') {
+    if (!authLoading) {
       fetchCategories();
     }
-  }, [userRole]);
+  }, [authLoading]);
 
   const fetchCategories = async () => {
     setLoading(true);

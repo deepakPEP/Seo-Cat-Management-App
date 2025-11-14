@@ -492,7 +492,7 @@ export default function CategoriesPage() {
     <div className="flex items-center justify-between gap-4 flex-wrap">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">Categories</h1>
-        <p className="text-gray-500 text-sm">Create, edit and manage your product categories.</p>
+        <p className="text-gray-500 text-sm">Create, edit and manage your categories.</p>
       </div>
       <div className="flex gap-2">
         {!isManagerViewOnly && (
@@ -553,7 +553,7 @@ export default function CategoriesPage() {
                   </div>
                   <div>
                     <h1 className="text-3xl font-bold text-slate-900">Categories</h1>
-                    <p className="text-slate-600 font-medium">Organize and manage your product categories</p>
+                    <p className="text-slate-600 font-medium">Organize and manage your categories</p>
                   </div>
                 </div>
               </div>

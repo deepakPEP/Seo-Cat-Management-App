@@ -10,16 +10,16 @@ import {
   UseGuards,
   UsePipes,
 } from '@nestjs/common';
-import { ProductService } from './product.service';
-import { CreateProductDto } from './dto/create-product.dto';
+import { ProductService } from './productcategory.service';
+import { CreateProductDto } from './dto/create-productcategory.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { createProductSchema } from './validation/product.zod';
+import { createProductSchema } from './validation/productcategory.zod';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { HttpStatus, HttpCode, Query } from '@nestjs/common';
 
-@Controller('products')
+@Controller('productcategories')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
@@ -30,7 +30,6 @@ export class ProductController {
 
   // @UsePipes(new ZodValidationPipe(createProductSchema))
   create(@Body() dto: CreateProductDto) {
-    console.log('Creating produfgthyjhgfct with data:', dto);
     return this.productService.create(dto);
   }
 
