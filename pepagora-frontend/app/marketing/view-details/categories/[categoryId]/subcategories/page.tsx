@@ -110,7 +110,7 @@ export default function SubcategoriesPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900 m-2">
-                    Sub Categories
+                    Sub Categories of {category?.name}
                   </h1>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl border border-green-200/60 p-6 shadow-lg">

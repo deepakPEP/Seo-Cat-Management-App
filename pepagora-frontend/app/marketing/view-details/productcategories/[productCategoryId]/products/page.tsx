@@ -9,6 +9,7 @@ import { useAuth } from "@/components/hooks/useAuth";
 type Product = {
   _id: string;
   productName: string;
+  liveUrl?: string;
 };
 
 type ProductCategory = {
@@ -58,15 +59,19 @@ export default function ProductsPage() {
       const productsRes = await axiosInstance.get(
         `/marketing/productcategories/${productCategoryId}/products`
       );
-      // Response interceptor wraps the data
-      const responseData = productsRes.data?.data || productsRes.data;
+      // Response interceptor wraps: {success, timestamp, data: {statusCode, message, data: [...], category: {...}, subcategory: {...}, productCategory: {...}}}
+      const responseData = productsRes.data?.data || {};
+      const actualData = responseData?.data || responseData;
+      
+      // Products array is in responseData.data
       const productData = Array.isArray(responseData?.data)
         ? responseData.data
-        : Array.isArray(responseData)
-        ? responseData
+        : Array.isArray(actualData)
+        ? actualData
         : [];
       setProducts(productData);
 
+      // Category, subcategory, and productCategory are at the same level as data
       if (responseData?.productCategory) {
         setProductCategory(responseData.productCategory);
       }
@@ -160,7 +165,7 @@ export default function ProductsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900 m-2">
-                    Products
+                    Products of {productCategory?.name}
                   </h1>
                   <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl border border-green-200/60 p-6 shadow-lg">
                     <div className="flex items-center gap-4">
@@ -210,9 +215,20 @@ export default function ProductsPage() {
                       key={product._id}
                       className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-200"
                     >
-                      <span className="text-lg font-medium text-gray-900">
-                        {product.productName}
-                      </span>
+                      {product.liveUrl ? (
+                        <a 
+                          href={`https://www.pepagora.com/en/p/${product.liveUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-lg font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {product.productName}
+                        </a>
+                      ) : (
+                        <span className="text-lg font-medium text-gray-900">
+                          {product.productName}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>

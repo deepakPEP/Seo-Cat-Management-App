@@ -9,6 +9,7 @@ import { useAuth } from "@/components/hooks/useAuth";
 type ProductCategory = {
   _id: string;
   name: string;
+  productCount?: number;
 };
 
 type Subcategory = {
@@ -57,16 +58,20 @@ export default function ProductCategoriesPage() {
         axiosInstance.get(`/marketing/subcategories/${subcategoryId}/product-count`),
       ]);
       
-      // Response interceptor wraps the data
-      const responseData =
-        productCategoriesRes.data?.data || productCategoriesRes.data;
+      // Response interceptor wraps: {success, timestamp, data: {statusCode, message, data: [...], category: {...}, subcategory: {...}}}
+      // So the structure is: res.data.data.data = productCategories array
+      //                     res.data.data.category = category object
+      //                     res.data.data.subcategory = subcategory object
+      const responseData = productCategoriesRes.data?.data || {};
+      
+      // Product categories array is in responseData.data
       const productCategoryData = Array.isArray(responseData?.data)
         ? responseData.data
-        : Array.isArray(responseData)
-        ? responseData
         : [];
+      
       setProductCategories(productCategoryData);
 
+      // Category and subcategory are at the same level as data
       if (responseData?.subcategory) {
         setSubcategory(responseData.subcategory);
       }
@@ -140,7 +145,7 @@ export default function ProductCategoriesPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900 m-2">
-                    Product Categories
+                    Product Categories of {subcategory?.name}
                   </h1>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl border border-green-200/60 p-6 shadow-lg">
@@ -214,36 +219,51 @@ export default function ProductCategoriesPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {productCategories.map((productCategory) => (
-                    <button
-                      key={productCategory._id}
-                      onClick={() =>
-                        router.push(
-                          `/marketing/view-details/productcategories/${productCategory._id}/products`
-                        )
-                      }
-                      className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-lg font-medium text-gray-900 group-hover:text-blue-600">
-                          {productCategory.name}
-                        </span>
-                        <svg
-                          className="w-5 h-5 text-gray-400 group-hover:text-blue-600"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 5l7 7-7 7"
-                          />
-                        </svg>
-                      </div>
-                    </button>
-                  ))}
+                  {productCategories.map((productCategory) => {
+                    const hasZeroProducts = (productCategory.productCount ?? 0) === 0;
+                    return (
+                      <button
+                        key={productCategory._id}
+                        onClick={() =>
+                          router.push(
+                            `/marketing/view-details/productcategories/${productCategory._id}/products`
+                          )
+                        }
+                        className={`w-full text-left p-4 rounded-lg border transition-all duration-200 group ${
+                          hasZeroProducts
+                            ? 'bg-gradient-to-r from-red-50 to-red-100 border-red-200 hover:border-red-400 hover:from-red-100 hover:to-red-200'
+                            : 'border-gray-200 hover:border-blue-500 hover:bg-blue-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`text-lg font-medium ${
+                            hasZeroProducts 
+                              ? 'text-red-900 group-hover:text-red-700' 
+                              : 'text-gray-900 group-hover:text-blue-600'
+                          }`}>
+                            {productCategory.name}
+                          </span>
+                          <svg
+                            className={`w-5 h-5 ${
+                              hasZeroProducts 
+                                ? 'text-red-400 group-hover:text-red-600' 
+                                : 'text-gray-400 group-hover:text-blue-600'
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

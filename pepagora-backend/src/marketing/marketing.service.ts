@@ -28,6 +28,7 @@ type ProductCategoryDocument = {
 type LiveProductDocument = {
   _id: ObjectId;
   productName?: string;
+  liveUrl?: string;
   productCategory?: {
     _id?: ObjectId;
   };
@@ -271,6 +272,7 @@ export class MarketingService {
       const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
       const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
       const productCategoriesCollection = this.metaDb.collection<ProductCategoryDocument>('productcategories');
+      const liveProductsCollection = this.metaDb.collection<LiveProductDocument>('liveproducts');
 
       const subcategoryObjectId = this.toObjectId(subcategoryId);
       if (!subcategoryObjectId) throw new BadRequestException('Invalid subcategory ID');
@@ -287,6 +289,22 @@ export class MarketingService {
         mappedChildren: { $in: [subcategory._id.toString()] },
       });
 
+      // Get product count for each product category
+      const productCategoriesWithCounts = await Promise.all(
+        productCategories.map(async (pc) => {
+          // Query using ObjectId - ensure we're using the correct field structure
+          const productCount = await liveProductsCollection.countDocuments({
+            'productCategory._id': pc._id,
+          });
+          
+          return {
+            _id: pc._id.toString(),
+            name: this.getProductCategoryName(pc),
+            productCount: productCount || 0, // Ensure it's always a number
+          };
+        })
+      );
+
       return {
         category: category
           ? {
@@ -298,10 +316,7 @@ export class MarketingService {
           _id: subcategory._id.toString(),
           name: this.getSubcategoryName(subcategory),
         },
-        productCategories: productCategories.map((pc) => ({
-          _id: pc._id.toString(),
-          name: this.getProductCategoryName(pc),
-        })),
+        productCategories: productCategoriesWithCounts,
       };
     } catch (error) {
       throw new BadRequestException('Failed to fetch product categories');
@@ -338,7 +353,7 @@ export class MarketingService {
       const products = await liveProductsCollection
         .find(
           { 'productCategory._id': productCategoryObjectId },
-          { projection: { productName: 1 } },
+          { projection: { productName: 1, liveUrl: 1 } },
         )
         .sort({ productName: 1 })
         .toArray();
@@ -363,6 +378,7 @@ export class MarketingService {
         products: products.map((product) => ({
           _id: product._id.toString(),
           productName: product.productName ?? 'Unnamed Product',
+          liveUrl: product.liveUrl ?? '',
         })),
       };
     } catch (error) {
