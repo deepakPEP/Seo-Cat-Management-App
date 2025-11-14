@@ -8,6 +8,7 @@ import axiosInstance from '../../lib/axiosInstance';
 import AddCategoryModal from '@/components/AddCategoryModal';
 import AddSubcategoryModal from '@/components/AddSubcategoryModal';
 import AddProductModal from '@/components/AddProductModal';
+import { useAuth } from '@/components/hooks/useAuth';
 
 type Category = {
   _id: string;
@@ -43,6 +44,7 @@ type Dprops = {
 }
 
 export default function Dashboard() {
+  const { userRole, loading: authLoading } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [Loading,setLoading]=useState<boolean>(false)
   const [categories,setCategories]=useState<Category[]>([])
@@ -50,6 +52,8 @@ export default function Dashboard() {
   const [products,setProducts]=useState<Product[]>([])
   const [subCategoryCount, setSubCategoryCount] = useState<number>(0);
   const [productCount, setProductCount] = useState<number>(0);
+  const [productCategoryCount, setProductCategoryCount] = useState<number>(0);
+  const [liveProductsCount, setLiveProductsCount] = useState<number>(0);
 
   // Modal states
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -73,84 +77,80 @@ export default function Dashboard() {
 // },[name])
 
 const fetch = async () => {
+    if (authLoading) return;
     setLoading(true);
+
     try {
-      const res = await axiosInstance.get('/categories', {
-       
-      });  
-      const data1 = Array.isArray(res.data.data.data) ? res.data.data.data : [];  
-      // console.log(data1)
+      // Categories are readable by all roles
+      const categoriesRes = await axiosInstance.get('/categories');
+      const data1 = Array.isArray(categoriesRes.data?.data?.data)
+        ? categoriesRes.data.data.data
+        : [];
       setCategories(data1);
     } catch (err) {
-      // console.error('Error fetching categories:', err);
       setCategories([]);
-    
-    } finally {
-      setLoading(false);
     }
+
     try {
-      const res = await axiosInstance.get('/subcategories', {
-       
-      });  
-      const data2 = Array.isArray(res.data.data.data) ? res.data.data.data : [];  
-      // console.log(data2)
+      const subcategoriesRes = await axiosInstance.get('/subcategories');
+      const data2 = Array.isArray(subcategoriesRes.data?.data?.data)
+        ? subcategoriesRes.data.data.data
+        : [];
       setSubcategories(data2);
     } catch (err) {
-      console.error('Error fetching categories:', err);
       setSubcategories([]);
-    
-    } finally {
-      setLoading(false);
     }
-    try {
-      const res = await axiosInstance.get('/products', {
-       
-      });  
-      const data3 = Array.isArray(res.data.data.data) ? res.data.data.data : [];  
-      // console.log(data3)
-      setProducts(data3);
-    } catch (err) {
-      console.error('Error fetching categories:', err);
+
+    if (userRole !== 'marketing_team') {
+      try {
+        const productsRes = await axiosInstance.get('/products');
+        const data3 = Array.isArray(productsRes.data?.data?.data)
+          ? productsRes.data.data.data
+          : [];
+        setProducts(data3);
+      } catch (err) {
+        setProducts([]);
+      }
+    } else {
       setProducts([]);
-    
-    } finally {
-      setLoading(false);
     }
 
-       try {
-  const res = await axiosInstance.get('/subcategories/count');
+    try {
+      const res = await axiosInstance.get('/subcategories/count');
+      const count = res.data?.data?.count ?? 0;
+      setSubCategoryCount(count);
+    } catch (err) {
+      setSubCategoryCount(0);
+    }
 
-  // console.log("response", res.data.count);
+    try {
+      const res = await axiosInstance.get('/products/count');
+      const count = res.data?.data?.count ?? 0;
+      setProductCount(userRole === 'marketing_team' ? 0 : count);
+    } catch (err) {
+      setProductCount(0);
+    }
 
-  const count = res.data.data.count; // fallback to 0 if not present
-  console.log("Subcategory Count:", count);
+    try {
+      const res = await axiosInstance.get('/marketing/dashboard/counts');
+      // Response interceptor wraps: {success, timestamp, data: {statusCode, message, data: {actualData}}}
+      const actualData = res.data?.data?.data || res.data?.data || {};
+      const productCatCount = actualData.productCategoryCount ?? 0;
+      const liveProducts = actualData.liveProductsCount ?? 0;
+      setProductCategoryCount(productCatCount);
+      setLiveProductsCount(liveProducts);
+    } catch (err) {
+      setProductCategoryCount(0);
+      setLiveProductsCount(0);
+    }
 
-  setSubCategoryCount(count);
-} catch (err) {
-  console.error('Error fetching subcategory count:', err);
-  setSubCategoryCount(0); // reset to 0 on error
-} finally {
-  setLoading(false);
-}
-   try {
-  const res = await axiosInstance.get('/products/count');
-
-  // console.log("response", res.data.count);
-
-  const count = res.data.data.count; // fallback to 0 if not present
-  console.log("Product Count:", count);
-
-  setProductCount(count);
-} catch (err) {
-  console.error('Error fetching product count:', err);
-  setProductCount(0); // reset to 0 on error
-} finally {
-  setLoading(false);
-}
+    setLoading(false);
   };
-  useEffect(()=>{
-    fetch()
-  },[])
+
+  useEffect(() => {
+    if (authLoading) return;
+    fetch();
+  }, [userRole, authLoading]);
   const categoriesCount = categories.length;
   const subCategoriesCount = subCategoryCount;
   const productsCount = productCount;
@@ -176,7 +176,7 @@ const fetch = async () => {
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {/* Categories Card */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow duration-300">
               <div className="p-6">
@@ -216,8 +216,35 @@ const fetch = async () => {
                     </div>
                   </div>
                   <div className="ml-4 flex-1">
-                    <p className="text-sm font-medium text-gray-600">Sub Categories</p>
+                    <p className="text-sm font-medium text-gray-600">Total Sub Categories</p>
                     <p className="text-3xl font-bold text-gray-900">{subCategoriesCount}</p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <div className="flex items-center text-sm text-green-600">
+                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Active
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Product Categories Card */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+              <div className="p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="ml-4 flex-1">
+                    <p className="text-sm font-medium text-gray-600">Total Product Categories</p>
+                    <p className="text-3xl font-bold text-gray-900">{productCategoryCount}</p>
                   </div>
                 </div>
                 <div className="mt-4">
@@ -236,15 +263,15 @@ const fetch = async () => {
               <div className="p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
                     </div>
                   </div>
                   <div className="ml-4 flex-1">
                     <p className="text-sm font-medium text-gray-600">Total Products</p>
-                    <p className="text-3xl font-bold text-gray-900">{productsCount}</p>
+                    <p className="text-3xl font-bold text-gray-900">{liveProductsCount}</p>
                   </div>
                 </div>
                 <div className="mt-4">
@@ -259,7 +286,8 @@ const fetch = async () => {
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* Quick Actions - Hidden for marketing_team */}
+          {userRole !== 'marketing_team' && (
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -309,6 +337,7 @@ const fetch = async () => {
               </button>
             </div>
           </div>
+          )}
 
           {/* Modal Components */}
           <AddCategoryModal 

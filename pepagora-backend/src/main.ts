@@ -13,17 +13,15 @@ import { winstonLogger } from './common/logger/winston-logger.service';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 
-
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: winstonLogger, // ✅ Winston replaces default logger
   });
-  
+
   app.use(cookieParser());
   // ✅ Enable CORS for frontend
   app.enableCors({
-    origin: process.env.FRONTEND_URL ,
+    origin: process.env.FRONTEND_URL,
     credentials: true,
   });
   app.use(helmet()); // ✅ Security headers with Helmet
@@ -34,7 +32,7 @@ async function bootstrap() {
   // ✅ Global Interceptors
   app.useGlobalInterceptors(
     new ResponseInterceptor(), // Standardized API Response
-    new LoggingInterceptor(),  // Logs every request & response time
+    new LoggingInterceptor(), // Logs every request & response time
   );
 
   // ✅ Global Validation (class-validator & class-transformer)

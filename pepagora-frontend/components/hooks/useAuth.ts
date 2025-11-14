@@ -6,7 +6,7 @@ import { jwtDecode } from 'jwt-decode';
 
 type TokenPayload = {
   sub: string;
-  role: 'admin' | 'category_manager' | 'pepagora_manager';
+  role: 'admin' | 'category_manager' | 'pepagora_manager' | 'marketing_team';
   iat: number;
   exp: number;
 };

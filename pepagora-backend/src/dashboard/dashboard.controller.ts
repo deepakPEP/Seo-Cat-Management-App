@@ -6,7 +6,6 @@ import { RolesGuard } from '../auth/roles.guard';
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DashboardController {
-  
   @Get('admin')
   @Roles('admin')
   getAdminDashboard(@Request() req) {
@@ -28,10 +27,7 @@ export class DashboardController {
     return {
       message: 'Welcome to Category Manager Dashboard',
       user: req.user,
-      features: [
-        'Manage categories',
-        'Manage subcategories',
-      ],
+      features: ['Manage categories', 'Manage subcategories'],
     };
   }
 
@@ -41,10 +37,7 @@ export class DashboardController {
     return {
       message: 'Welcome to Pepagora Manager Dashboard',
       user: req.user,
-      features: [
-        'Manage products',
-        'View subcategories and categories',
-      ],
+      features: ['Manage products', 'View subcategories and categories'],
     };
   }
 }

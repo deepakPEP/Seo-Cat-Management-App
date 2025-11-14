@@ -7,14 +7,13 @@ export class Product extends Document {
   @Prop({ required: true })
   name: string;
 
-
   @Prop({ type: Types.ObjectId, ref: 'Subcategory', required: true })
   mappedParent?: Subcategory;
-   
- @Prop()
- uniqueId?:string;
- @Prop()
- liveUrl?:string;  
+
+  @Prop()
+  uniqueId?: string;
+  @Prop()
+  liveUrl?: string;
   @Prop()
   metaTitle?: string;
 
@@ -23,17 +22,12 @@ export class Product extends Document {
 
   @Prop()
   metaDescription?: string;
-  
- @Prop()
+
+  @Prop()
   imageUrl?: string;
 
   @Prop({ type: String })
   description?: string;
-  
-
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
-
-
-

@@ -11,11 +11,15 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 
 @Injectable()
 export class CategoryService {
-  constructor(@InjectModel(Category.name) private categoryModel: Model<Category>) {}
+  constructor(
+    @InjectModel(Category.name) private categoryModel: Model<Category>,
+  ) {}
 
   async create(dto: CreateCategoryDto) {
     // Check for duplicate category name
-    const existingCategory = await this.categoryModel.findOne({ name: dto.main_cat_name });
+    const existingCategory = await this.categoryModel.findOne({
+      name: dto.main_cat_name,
+    });
     if (existingCategory) {
       throw new ConflictException('Category with this name already exists');
     }
@@ -36,58 +40,63 @@ export class CategoryService {
   //     throw new BadRequestException('Failed to fetch categories');
   //   }
   // }
-//   async findAll(page = 1, limit = 10) {
-//   try {
-//     const skip = (page - 1) * limit;
+  //   async findAll(page = 1, limit = 10) {
+  //   try {
+  //     const skip = (page - 1) * limit;
 
-//     // Fetch paginated categories
-//     const [data, totalCount] = await Promise.all([
-//       this.categoryModel.find().sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
-//       this.categoryModel.countDocuments()
-//     ]);
+  //     // Fetch paginated categories
+  //     const [data, totalCount] = await Promise.all([
+  //       this.categoryModel.find().sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+  //       this.categoryModel.countDocuments()
+  //     ]);
 
-//     const totalPages = Math.ceil(totalCount / limit);
+  //     const totalPages = Math.ceil(totalCount / limit);
 
-//     return { data, totalCount, totalPages };
-//   } catch (error) {
-//     throw new BadRequestException('Failed to fetch categories');
-//   }
-// }
-async findAll(page = 1, limit = 100, search?: string, sortBy: string = 'createdAt', sortOrder: 'asc' | 'desc' = 'desc') {
-  try {
-    const skip = (page - 1) * limit;
+  //     return { data, totalCount, totalPages };
+  //   } catch (error) {
+  //     throw new BadRequestException('Failed to fetch categories');
+  //   }
+  // }
+  async findAll(
+    page = 1,
+    limit = 100,
+    search?: string,
+    sortBy: string = 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc',
+  ) {
+    try {
+      const skip = (page - 1) * limit;
 
-    // Prepare filter for search
-    const filter = search ? { name: { $regex: search, $options: 'i' } } : {};
+      // Prepare filter for search
+      const filter = search ? { name: { $regex: search, $options: 'i' } } : {};
 
-    // Determine sort order
-    const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
+      // Determine sort order
+      const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
 
-    // Fetch paginated categories with filters and sorting
-    const [data, totalCount] = await Promise.all([
-      this.categoryModel
-        .find(filter)
-        .sort({ [sortBy]: sortOrderValue })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.categoryModel.countDocuments(filter),
-    ]);
+      // Fetch paginated categories with filters and sorting
+      const [data, totalCount] = await Promise.all([
+        this.categoryModel
+          .find(filter)
+          .sort({ [sortBy]: sortOrderValue })
+          .skip(skip)
+          .limit(limit)
+          .exec(),
+        this.categoryModel.countDocuments(filter),
+      ]);
 
-    const totalPages = Math.ceil(totalCount / limit);
+      const totalPages = Math.ceil(totalCount / limit);
 
-    return {
-      data,
-      totalCount,
-      totalPages,
-      currentPage: page,
-      pageSize: limit,
-    };
-  } catch (error) {
-    throw new BadRequestException('Failed to fetch categories');
+      return {
+        data,
+        totalCount,
+        totalPages,
+        currentPage: page,
+        pageSize: limit,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch categories');
+    }
   }
-}
-
 
   async findOne(id: string) {
     if (!isValidObjectId(id)) {
@@ -107,10 +116,14 @@ async findAll(page = 1, limit = 100, search?: string, sortBy: string = 'createdA
     }
 
     try {
-      const updatedCategory = await this.categoryModel.findByIdAndUpdate(id, dto, {
-        new: true,
-        runValidators: true, // Enforce schema validation
-      });
+      const updatedCategory = await this.categoryModel.findByIdAndUpdate(
+        id,
+        dto,
+        {
+          new: true,
+          runValidators: true, // Enforce schema validation
+        },
+      );
       if (!updatedCategory) {
         throw new NotFoundException(`Category with ID ${id} not found`);
       }

@@ -7,9 +7,9 @@ export class Category extends Document {
   main_cat_name: string;
 
   @Prop()
-  uniqueId?:string;
+  uniqueId?: string;
   @Prop()
-  liveUrl?:string;
+  liveUrl?: string;
 
   @Prop()
   metaTitle?: string;
@@ -20,7 +20,7 @@ export class Category extends Document {
   @Prop()
   metaDescription?: string;
 
- @Prop()
+  @Prop()
   imageUrl?: string;
   @Prop({ type: [Types.ObjectId], ref: 'Category', default: [] })
   mappedChildren?: Types.ObjectId[];

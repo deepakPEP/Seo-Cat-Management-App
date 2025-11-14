@@ -11,7 +11,7 @@ export class SignupDto {
   @MinLength(6)
   password: string;
 
-  @IsEnum(['admin', 'category_manager', 'pepagora_manager'])
+  @IsIn(['admin', 'category_manager', 'pepagora_manager', 'marketing_team'])
   role: string;
 }
 
@@ -22,7 +22,7 @@ export class LoginDto {
   @IsString()
   @MinLength(6)
   password: string;
-} 
+}
 
 export class UpdateUserDto {
   @IsEmail()
@@ -31,6 +31,6 @@ export class UpdateUserDto {
   @IsString()
   username: string;
 
-  @IsIn(['admin', 'category_manager', 'pepagora_manager'])
+  @IsIn(['admin', 'category_manager', 'pepagora_manager', 'marketing_team'])
   role: string;
 }

@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-const objectIdSchema = z
-  .string()
-  .regex(/^[0-9a-fA-F]{24}$/, { message: 'Each mappedChild must be a valid ObjectId' });
+const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, {
+  message: 'Each mappedChild must be a valid ObjectId',
+});
 
 export const createSubcategorySchema = z.object({
   sub_cat_name: z
@@ -16,7 +16,6 @@ export const createSubcategorySchema = z.object({
   mappedParent: z
     .string()
     .regex(/^[0-9a-fA-F]{24}$/, { message: 'Invalid MongoDB ObjectId' }),
-    
 
   metaTitle: z.string().optional(),
   metaKeyword: z.string().optional(),
@@ -26,7 +25,7 @@ export const createSubcategorySchema = z.object({
     .string()
     .url({ message: 'Image URL must be a valid URL' })
     .optional(),
-    mappedChildren: z.array(objectIdSchema).optional(),
+  mappedChildren: z.array(objectIdSchema).optional(),
   description: z.string().optional(),
 });
 

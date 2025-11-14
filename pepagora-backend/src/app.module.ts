@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { CategoryModule } from './category/category.module';
 import { SubcategoryModule } from './subcategory/subcategory.module';
 import { ProductModule } from './product/product.module';
+import { MarketingModule } from './marketing/marketing.module';
 import { DashboardController } from './dashboard/dashboard.controller';
 import { ThrottlerModule } from '@nestjs/throttler';
 
@@ -25,6 +26,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
     CategoryModule,
     SubcategoryModule,
     ProductModule,
+    MarketingModule,
     ThrottlerModule.forRoot([{ ttl: 60, limit: 100 }]),
   ],
   controllers: [DashboardController],

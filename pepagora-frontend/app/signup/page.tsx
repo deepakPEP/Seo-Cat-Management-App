@@ -289,6 +289,7 @@ export default function SignupPage() {
                     <option value="admin">👑 Admin - Full Access</option>
                     <option value="category_manager">📁 Category Manager - Manage Categories</option>
                     <option value="pepagora_manager">🏢 Pepagora Manager - General Management</option>
+                    <option value="marketing_team">💻 Marketing Team - Marketing </option>
                   </select>
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <svg className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">

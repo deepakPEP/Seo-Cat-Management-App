@@ -1,4 +1,10 @@
-import { IsString, IsMongoId, IsOptional, IsUrl, IsNumber } from 'class-validator';
+import {
+  IsString,
+  IsMongoId,
+  IsOptional,
+  IsUrl,
+  IsNumber,
+} from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
@@ -10,21 +16,20 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
-  uniqueId?:string;
+  uniqueId?: string;
 
   @IsOptional()
   @IsString()
-  liveUrl?:string;
+  liveUrl?: string;
 
-  
   @IsOptional()
   @IsString()
   metaTitle?: string;
-  
+
   @IsOptional()
   @IsString()
   metaKeyword?: string;
-  
+
   @IsOptional()
   @IsString()
   metaDescription?: string;

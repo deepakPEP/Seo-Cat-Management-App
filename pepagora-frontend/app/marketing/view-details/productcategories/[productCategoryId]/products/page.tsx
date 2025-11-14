@@ -1,0 +1,177 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import Sidebar from '@/components/Sidebar';
+import axiosInstance from '../../../../../../lib/axiosInstance';
+import { useAuth } from '@/components/hooks/useAuth';
+
+type Product = {
+  _id: string;
+  productName: string;
+};
+
+type ProductCategory = {
+  _id: string;
+  name: string;
+};
+
+type Subcategory = {
+  _id: string;
+  name: string;
+};
+
+type Category = {
+  _id: string;
+  name: string;
+};
+
+export default function ProductsPage() {
+  const { userRole, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const params = useParams();
+  const productCategoryId = params.productCategoryId as string;
+  
+  const [collapsed, setCollapsed] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productCategory, setProductCategory] = useState<ProductCategory | null>(null);
+  const [subcategory, setSubcategory] = useState<Subcategory | null>(null);
+  const [category, setCategory] = useState<Category | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!authLoading && userRole !== 'marketing_team') {
+      router.push('/dashboard');
+    }
+  }, [userRole, authLoading, router]);
+
+  useEffect(() => {
+    if (userRole === 'marketing_team' && productCategoryId) {
+      fetchData();
+    }
+  }, [userRole, productCategoryId]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const productsRes = await axiosInstance.get(`/marketing/productcategories/${productCategoryId}/products`);
+      // Response interceptor wraps the data
+      const responseData = productsRes.data?.data || productsRes.data;
+      const productData = Array.isArray(responseData?.data)
+        ? responseData.data
+        : Array.isArray(responseData)
+        ? responseData
+        : [];
+      setProducts(productData);
+
+      if (responseData?.productCategory) {
+        setProductCategory(responseData.productCategory);
+      }
+      if (responseData?.subcategory) {
+        setSubcategory(responseData.subcategory);
+      }
+      if (responseData?.category) {
+        setCategory(responseData.category);
+      }
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (authLoading || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  const pathSegments = [category?.name, subcategory?.name, productCategory?.name].filter(Boolean) as string[];
+  const path = pathSegments.length > 0 ? `${pathSegments.join('/')}/` : '';
+
+  return (
+    <>
+      <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
+      <div className={`transition-all duration-300 ${collapsed ? 'ml-20' : 'ml-80'} min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100`}>
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="py-6">
+              <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                <button onClick={() => router.push('/marketing/view-details')} className="hover:text-blue-600">
+                  Categories
+                </button>
+                {category && (
+                  <>
+                    <span>/</span>
+                    <button
+                      onClick={() => router.push(`/marketing/view-details/categories/${category._id}/subcategories`)}
+                      className="hover:text-blue-600"
+                    >
+                      {category.name}
+                    </button>
+                  </>
+                )}
+                {subcategory && (
+                  <>
+                    <span>/</span>
+                    <button
+                      onClick={() => router.push(`/marketing/view-details/subcategories/${subcategory._id}/productcategories`)}
+                      className="hover:text-blue-600"
+                    >
+                      {subcategory.name}
+                    </button>
+                  </>
+                )}
+                {productCategory && (
+                  <>
+                    <span>/</span>
+                    <span className="text-gray-900">{productCategory.name}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">Products</h1>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {path ? `Path: ${path}` : ''} • {products.length} products
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+            <div className="p-6">
+              {products.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">No products found</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {products.map((product) => (
+                    <div
+                      key={product._id}
+                      className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-200"
+                    >
+                      <span className="text-lg font-medium text-gray-900">
+                        {product.productName}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+

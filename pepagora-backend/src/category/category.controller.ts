@@ -20,7 +20,6 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { createCategorySchema } from './validation/category.zod';
 import { Query } from '@nestjs/common';
 
-
 @Controller('categories')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CategoryController {
@@ -40,35 +39,37 @@ export class CategoryController {
     };
   }
 
-
-@Get()
-@HttpCode(HttpStatus.OK)
-async findAll(
-  @Query('page') page: number = 1,
-  @Query('limit') limit: number = 100,
-   @Query('search') search?: string,
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  async findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 100,
+    @Query('search') search?: string,
     @Query('sortBy') sortBy = 'createdAt',
     @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'desc',
-) {
-   page = Math.max(Number(page), 1);
-  limit = Math.min(Math.max(Number(limit), 1), 1000); // max limit = 1000
-  const { data, totalCount, totalPages } = await this.categoryService.findAll(page, limit, search, sortBy, sortOrder);
-
-  return {
-    statusCode: HttpStatus.OK,
-    message: 'Categories fetched successfully',
-    data,
-    pagination: {
+  ) {
+    page = Math.max(Number(page), 1);
+    limit = Math.min(Math.max(Number(limit), 1), 1000); // max limit = 1000
+    const { data, totalCount, totalPages } = await this.categoryService.findAll(
       page,
       limit,
-      totalCount,
-      totalPages,
-    },
-  };
-}
+      search,
+      sortBy,
+      sortOrder,
+    );
 
-
-  
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Categories fetched successfully',
+      data,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+      },
+    };
+  }
 
   @Get(':id')
   @HttpCode(HttpStatus.OK)

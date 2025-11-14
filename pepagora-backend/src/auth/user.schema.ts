@@ -14,7 +14,10 @@ export class User {
   @Prop({ required: true })
   username: string;
 
-  @Prop({ enum: ['admin', 'category_manager', 'pepagora_manager'], default: 'pepagora_manager' })
+  @Prop({
+    enum: ['admin', 'category_manager', 'pepagora_manager', 'marketing_team'],
+    default: 'pepagora_manager',
+  })
   role: string;
 
   @Prop()

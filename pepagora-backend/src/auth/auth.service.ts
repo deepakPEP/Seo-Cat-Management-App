@@ -41,9 +41,14 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Invalid email or password');
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) throw new UnauthorizedException('Invalid email or password');
+    if (!isPasswordValid)
+      throw new UnauthorizedException('Invalid email or password');
 
-    const payload = { sub: user._id.toString(), email: user.email, role: user.role };
+    const payload = {
+      sub: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    };
 
     const accessToken = this.jwtService.sign(payload, {
       secret: process.env.JWT_SECRET,
@@ -57,13 +62,20 @@ export class AuthService {
 
     // ✅ Hash the refresh token before storing
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
-    await this.userModel.findByIdAndUpdate(user._id, { refreshToken: hashedRefreshToken });
+    await this.userModel.findByIdAndUpdate(user._id, {
+      refreshToken: hashedRefreshToken,
+    });
 
     return {
       message: 'Login successful',
       accessToken,
       refreshToken, // Send plain token to client
-      user: { id: user._id, email: user.email, role: user.role, username:user.username },
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        username: user.username,
+      },
     };
   }
 
@@ -95,7 +107,6 @@ export class AuthService {
   }
 
   async updateUser(id: string, dto: UpdateUserDto) {
-
     const user = await this.userModel.findByIdAndUpdate(id, dto, { new: true });
     if (!user) throw new NotFoundException('User not found');
     return { message: 'User updated successfully', user };
@@ -106,7 +117,6 @@ export class AuthService {
     await this.userModel.findByIdAndUpdate(userId, { refreshToken: null });
     return { message: 'Logged out successfully' };
   }
-  
 
   // ✅ Get all users (Admin only)
   async findAllUsers() {

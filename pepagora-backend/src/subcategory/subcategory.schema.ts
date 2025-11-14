@@ -10,16 +10,16 @@ export class Subcategory extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Category', required: true })
   mappedParent: Category;
 
-    @Prop({ type: [Types.ObjectId], ref: 'Product', default: [] })
+  @Prop({ type: [Types.ObjectId], ref: 'Product', default: [] })
   mappedChildren: Types.ObjectId[];
-   
+
   // @Prop({ type: Types.ObjectId, ref: 'Product' })
   // mappedChildren: Types.ObjectId[];
 
   @Prop()
-  uniqueId?:string;
+  uniqueId?: string;
   @Prop()
-  liveUrl?:string;  
+  liveUrl?: string;
 
   @Prop()
   metaTitle: string;
@@ -30,9 +30,9 @@ export class Subcategory extends Document {
   @Prop()
   metaDescription: string;
 
- @Prop()
+  @Prop()
   sub_cat_img_url?: string;
-  
+
   @Prop({ type: String })
   description?: string;
 }

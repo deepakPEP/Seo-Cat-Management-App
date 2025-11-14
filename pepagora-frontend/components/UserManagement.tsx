@@ -8,7 +8,7 @@ import { FiSearch, FiUserPlus, FiMail, FiUser, FiShield } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import Sidebar from './Sidebar';
 
-type UserRole = 'admin' | 'category_manager' | 'pepagora_manager';
+type UserRole = 'admin' | 'category_manager' | 'pepagora_manager'| 'marketing_team';
 
 interface User {
   _id: string;
@@ -85,6 +85,8 @@ export default function UserManagement() {
         return { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: '📁', label: 'Category Manager' };
       case 'pepagora_manager':
         return { color: 'bg-green-100 text-green-800 border-green-200', icon: '🏢', label: 'Pepagora Manager' };
+      case 'marketing_team':
+        return { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: '💻', label: 'Marketing Team' };
       default:
         return { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: '👤', label: role };
     }
@@ -331,6 +333,7 @@ export default function UserManagement() {
                       <option value="admin">👑 Admin - Full Access</option>
                       <option value="category_manager">📁 Category Manager - Manage Categories</option>
                       <option value="pepagora_manager">🏢 Pepagora Manager - General Management</option>
+                      <option value="marketing_team">💻 Marketing Team - Marketing Management</option>
                     </select>
                   </div>
 

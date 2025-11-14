@@ -33,32 +33,49 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     }
   };
 
-  const navItems = [
-    { 
-      href: '/dashboard', 
-      label: 'Dashboard', 
-      icon: <FiHome size={20} />,
-      gradient: 'from-blue-500 to-blue-600'
-    },
-    { 
-      href: '/categories', 
-      label: 'Categories', 
-      icon: <FiLayers size={20} />,
-      gradient: 'from-green-500 to-green-600'
-    },
-    { 
-      href: '/subcategories', 
-      label: 'Subcategories', 
-      icon: <FiGrid size={20} />,
-      gradient: 'from-yellow-500 to-yellow-600'
-    },
-    { 
-      href: '/products', 
-      label: 'Products', 
-      icon: <FiBox size={20} />,
-      gradient: 'from-purple-500 to-purple-600'
-    },
-  ];
+  const getNavItems = () => {
+    // Marketing team only sees View Details
+    if (userRole === 'marketing_team') {
+      return [
+        { 
+          href: '/marketing/view-details', 
+          label: 'View Details', 
+          icon: <FiHome size={20} />,
+          gradient: 'from-blue-500 to-blue-600'
+        },
+      ];
+    }
+
+    // Other roles see all items
+    return [
+      { 
+        href: '/dashboard', 
+        label: 'Dashboard', 
+        icon: <FiHome size={20} />,
+        gradient: 'from-blue-500 to-blue-600'
+      },
+      { 
+        href: '/categories', 
+        label: 'Categories', 
+        icon: <FiLayers size={20} />,
+        gradient: 'from-green-500 to-green-600'
+      },
+      { 
+        href: '/subcategories', 
+        label: 'Subcategories', 
+        icon: <FiGrid size={20} />,
+        gradient: 'from-yellow-500 to-yellow-600'
+      },
+      { 
+        href: '/products', 
+        label: 'Products', 
+        icon: <FiBox size={20} />,
+        gradient: 'from-purple-500 to-purple-600'
+      },
+    ];
+  };
+
+  const navItems = getNavItems();
 
   return (
     <aside
@@ -125,7 +142,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         })}
 
         {/* Admin Only Section */}
-        {userRole === 'admin' && (
+        {userRole === 'admin' && userRole !== 'marketing_team' && (
           <div className="pt-8 mt-6 border-t border-white/10 space-y-2">
             {!collapsed && (
               <div className="px-4 mb-4">

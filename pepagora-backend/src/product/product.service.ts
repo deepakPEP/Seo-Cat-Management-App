@@ -6,7 +6,6 @@
 // import { Subcategory } from '../subcategory/subcategory.schema';
 // import { isValidObjectId } from 'mongoose';
 
-
 // @Injectable()
 // export class ProductService {
 //   constructor(
@@ -26,7 +25,6 @@
 //       throw new BadRequestException('Failed to create product');
 //     }
 //   }
-
 
 //   // async findAll() {
 //   //   return this.productModel.find().populate('subcategory').exec();
@@ -70,7 +68,6 @@
 //     return await this.productModel.countDocuments().exec();
 //   }
 
-
 //   async findOne(id: string) {
 //     const product = await this.productModel.findById(id).populate('mappedParent');
 //     if (!product) throw new NotFoundException('Product not found');
@@ -88,8 +85,6 @@
 //     if (!deleted) throw new NotFoundException('Product not found');
 //     return deleted;
 //   }
-
-  
 
 // // product.service.ts
 // async findByFilters(categoryIds: string[], subcategoryIds: string[]) {
@@ -123,12 +118,15 @@
 //     // console.log('Fetched products:',ans);
 //     return ans;
 //     }
-  
+
 //   }
 
-
-
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Product } from './product.schema';
@@ -183,7 +181,11 @@ export class ProductService {
           .populate({
             path: 'mappedParent', // populate subcategory
             select: '_id sub_cat_name mappedParent',
-            populate: { path: 'mappedParent', model: 'Category', select: '_id main_cat_name' }, // populate category inside subcategory
+            populate: {
+              path: 'mappedParent',
+              model: 'Category',
+              select: '_id main_cat_name',
+            }, // populate category inside subcategory
           })
           .sort({ [sortBy]: sortOrderValue })
           .skip(skip)
@@ -213,15 +215,18 @@ export class ProductService {
 
   // ----------------- FETCH ONE -----------------
   async findOne(id: string) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID');
+    if (!Types.ObjectId.isValid(id))
+      throw new BadRequestException('Invalid ID');
 
-    const product = await this.productModel
-      .findById(id)
-      .populate({
+    const product = await this.productModel.findById(id).populate({
+      path: 'mappedParent',
+      select: '_id sub_cat_name mappedParent',
+      populate: {
         path: 'mappedParent',
-        select: '_id sub_cat_name mappedParent',
-        populate: { path: 'mappedParent', model: 'Category', select: '_id main_cat_name' },
-      });
+        model: 'Category',
+        select: '_id main_cat_name',
+      },
+    });
 
     if (!product) throw new NotFoundException('Product not found');
     return product;
@@ -229,11 +234,12 @@ export class ProductService {
 
   // ----------------- UPDATE -----------------
   async update(id: string, dto: Partial<CreateProductDto>) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID');
+    if (!Types.ObjectId.isValid(id))
+      throw new BadRequestException('Invalid ID');
 
     // Remove undefined fields from dto for partial update
     const updateFields: any = {};
-    Object.keys(dto).forEach(key => {
+    Object.keys(dto).forEach((key) => {
       if (dto[key] !== undefined) updateFields[key] = dto[key];
     });
 
@@ -242,7 +248,11 @@ export class ProductService {
       .populate({
         path: 'mappedParent',
         select: '_id sub_cat_name mappedParent',
-        populate: { path: 'mappedParent', model: 'Category', select: '_id main_cat_name' },
+        populate: {
+          path: 'mappedParent',
+          model: 'Category',
+          select: '_id main_cat_name',
+        },
       });
 
     if (!updated) throw new NotFoundException('Product not found');
@@ -251,7 +261,8 @@ export class ProductService {
 
   // ----------------- DELETE -----------------
   async remove(id: string) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID');
+    if (!Types.ObjectId.isValid(id))
+      throw new BadRequestException('Invalid ID');
 
     const deleted = await this.productModel.findByIdAndDelete(id);
     if (!deleted) throw new NotFoundException('Product not found');
@@ -259,15 +270,22 @@ export class ProductService {
   }
 
   // ----------------- FILTER BY CATEGORY / SUBCATEGORY -----------------
-  async findByFilters(categoryIds: string[] = [], subcategoryIds: string[] = []) {
+  async findByFilters(
+    categoryIds: string[] = [],
+    subcategoryIds: string[] = [],
+  ) {
     const query: any = {};
 
     if (categoryIds.length > 0) {
       // get all subcategories belonging to these categories
-      const subcategories = await this.subcategoryModel
-        .find({ mappedParent: { $in: categoryIds.map((id) => new Types.ObjectId(id)) } })
+      const subcategories = (await this.subcategoryModel
+        .find({
+          mappedParent: {
+            $in: categoryIds.map((id) => new Types.ObjectId(id)),
+          },
+        })
         .select('_id')
-        .exec() as { _id: Types.ObjectId }[];
+        .exec()) as { _id: Types.ObjectId }[];
 
       const subIdsFromCategories = subcategories.map((s) => s._id.toString());
 
@@ -276,9 +294,13 @@ export class ProductService {
           ? [...new Set([...subIdsFromCategories, ...subcategoryIds])]
           : subIdsFromCategories;
 
-      query.mappedParent = { $in: finalSubIds.map((id) => new Types.ObjectId(id)) };
+      query.mappedParent = {
+        $in: finalSubIds.map((id) => new Types.ObjectId(id)),
+      };
     } else if (subcategoryIds.length > 0) {
-      query.mappedParent = { $in: subcategoryIds.map((id) => new Types.ObjectId(id)) };
+      query.mappedParent = {
+        $in: subcategoryIds.map((id) => new Types.ObjectId(id)),
+      };
     }
 
     // populate subcategory and category
@@ -287,7 +309,11 @@ export class ProductService {
       .populate({
         path: 'mappedParent',
         select: '_id sub_cat_name mappedParent',
-        populate: { path: 'mappedParent', model: 'Category', select: '_id main_cat_name' },
+        populate: {
+          path: 'mappedParent',
+          model: 'Category',
+          select: '_id main_cat_name',
+        },
       })
       .exec();
   }

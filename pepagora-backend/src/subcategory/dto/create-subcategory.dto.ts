@@ -1,4 +1,10 @@
-import { IsString,IsArray, IsMongoId, IsOptional, IsUrl } from 'class-validator';
+import {
+  IsString,
+  IsArray,
+  IsMongoId,
+  IsOptional,
+  IsUrl,
+} from 'class-validator';
 
 export class CreateSubcategoryDto {
   @IsString()
@@ -31,10 +37,10 @@ export class CreateSubcategoryDto {
   @IsUrl({}, { message: 'Image URL must be a valid URL' })
   sub_cat_img_url?: string; // New field for S3 image URL
 
-    @IsOptional()
-    @IsArray()
-    @IsString({ each: true })
-    mappedChildren?: string[];
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mappedChildren?: string[];
 
   @IsOptional()
   @IsString()

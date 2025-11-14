@@ -10,7 +10,8 @@ import {
   Res,
   Put,
   Req,
-  UnauthorizedException,NotFoundException
+  UnauthorizedException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
@@ -37,7 +38,10 @@ export class AuthController {
   // ✅ Login (Set Refresh Token in HttpOnly Cookie)
   @Post('login')
   // @UsePipes(new ZodValidationPipe(loginSchema))
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const result = await this.authService.login(dto.email, dto.password);
 
     // ✅ Set HttpOnly cookie for refresh token
@@ -57,7 +61,6 @@ export class AuthController {
 
   // ✅ Refresh Access Token using Refresh Token from Cookie
   @Post('refresh')
-  
   async refresh(@Req() req: Request) {
     const refreshToken = req.cookies['refreshToken'];
     if (!refreshToken) {
@@ -68,8 +71,10 @@ export class AuthController {
 
   // ✅ Logout (Clear Refresh Token Cookie)
   @Post('logout')
-  async logout(@Res({ passthrough: true }) res: Response, @Body('userId') userId: string) {
-    
+  async logout(
+    @Res({ passthrough: true }) res: Response,
+    @Body('userId') userId: string,
+  ) {
     await this.authService.logout(userId);
     res.clearCookie('refreshToken', {
       httpOnly: true,
@@ -77,12 +82,8 @@ export class AuthController {
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     });
 
-    return { message: 'Logged out successfully',
-          userId: userId
-     };
+    return { message: 'Logged out successfully', userId: userId };
   }
-
-
 
   // ✅ Get all users (Admin only)
   @Get('users')
@@ -93,24 +94,24 @@ export class AuthController {
   }
 
   @Get('email-exists')
-async emailExists(@Query('email') email: string) {
-  const user = await this.authService.findUser({ email });
-  return { exists: !!user };
-}
+  async emailExists(@Query('email') email: string) {
+    const user = await this.authService.findUser({ email });
+    return { exists: !!user };
+  }
 
-@Get('users/:id')
-async getUser(@Param('id') id: string) {
-  const user = await this.authService.findUser({ _id: id });
-  if (!user) throw new NotFoundException('User not found');
-  return user;
-}
+  @Get('users/:id')
+  async getUser(@Param('id') id: string) {
+    const user = await this.authService.findUser({ _id: id });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
 
-@Put('users/:id')
-// @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
-async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-  return this.authService.updateUser(id, dto);
-}
+  @Put('users/:id')
+  // @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.authService.updateUser(id, dto);
+  }
 
   // ✅ Delete a user (Admin only)
   @Delete('users/:id')
