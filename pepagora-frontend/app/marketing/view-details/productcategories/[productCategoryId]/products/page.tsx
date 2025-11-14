@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import Sidebar from '@/components/Sidebar';
-import axiosInstance from '../../../../../../lib/axiosInstance';
-import { useAuth } from '@/components/hooks/useAuth';
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
+import Sidebar from "@/components/Sidebar";
+import axiosInstance from "../../../../../../lib/axiosInstance";
+import { useAuth } from "@/components/hooks/useAuth";
 
 type Product = {
   _id: string;
@@ -31,30 +31,33 @@ export default function ProductsPage() {
   const router = useRouter();
   const params = useParams();
   const productCategoryId = params.productCategoryId as string;
-  
+
   const [collapsed, setCollapsed] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [productCategory, setProductCategory] = useState<ProductCategory | null>(null);
+  const [productCategory, setProductCategory] =
+    useState<ProductCategory | null>(null);
   const [subcategory, setSubcategory] = useState<Subcategory | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!authLoading && userRole !== 'marketing_team') {
-      router.push('/dashboard');
-    }
-  }, [userRole, authLoading, router]);
-
-  useEffect(() => {
-    if (userRole === 'marketing_team' && productCategoryId) {
+    if (!authLoading) {
       fetchData();
     }
-  }, [userRole, productCategoryId]);
+  }, [authLoading]);
+
+  useEffect(() => {
+    if (productCategoryId) {
+      fetchData();
+    }
+  }, [productCategoryId]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const productsRes = await axiosInstance.get(`/marketing/productcategories/${productCategoryId}/products`);
+      const productsRes = await axiosInstance.get(
+        `/marketing/productcategories/${productCategoryId}/products`
+      );
       // Response interceptor wraps the data
       const responseData = productsRes.data?.data || productsRes.data;
       const productData = Array.isArray(responseData?.data)
@@ -74,7 +77,7 @@ export default function ProductsPage() {
         setCategory(responseData.category);
       }
     } catch (err) {
-      console.error('Error fetching data:', err);
+      console.error("Error fetching data:", err);
       setProducts([]);
     } finally {
       setLoading(false);
@@ -89,26 +92,41 @@ export default function ProductsPage() {
     );
   }
 
-  const pathSegments = [category?.name, subcategory?.name, productCategory?.name].filter(Boolean) as string[];
-  const path = pathSegments.length > 0 ? `${pathSegments.join('/')}/` : '';
+  const pathSegments = [
+    category?.name,
+    subcategory?.name,
+    productCategory?.name,
+  ].filter(Boolean) as string[];
+  const path = pathSegments.length > 0 ? `${pathSegments.join("/")}/` : "";
 
   return (
     <>
       <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
-      <div className={`transition-all duration-300 ${collapsed ? 'ml-20' : 'ml-80'} min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100`}>
+      <div
+        className={`transition-all duration-300 ${
+          collapsed ? "ml-20" : "ml-80"
+        } min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100`}
+      >
         {/* Header */}
         <div className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="py-6">
               <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                <button onClick={() => router.push('/marketing/view-details')} className="hover:text-blue-600">
+                <button
+                  onClick={() => router.push("/marketing/view-details")}
+                  className="hover:text-blue-600"
+                >
                   Categories
                 </button>
                 {category && (
                   <>
                     <span>/</span>
                     <button
-                      onClick={() => router.push(`/marketing/view-details/categories/${category._id}/subcategories`)}
+                      onClick={() =>
+                        router.push(
+                          `/marketing/view-details/categories/${category._id}/subcategories`
+                        )
+                      }
                       className="hover:text-blue-600"
                     >
                       {category.name}
@@ -119,7 +137,11 @@ export default function ProductsPage() {
                   <>
                     <span>/</span>
                     <button
-                      onClick={() => router.push(`/marketing/view-details/subcategories/${subcategory._id}/productcategories`)}
+                      onClick={() =>
+                        router.push(
+                          `/marketing/view-details/subcategories/${subcategory._id}/productcategories`
+                        )
+                      }
                       className="hover:text-blue-600"
                     >
                       {subcategory.name}
@@ -129,16 +151,44 @@ export default function ProductsPage() {
                 {productCategory && (
                   <>
                     <span>/</span>
-                    <span className="text-gray-900">{productCategory.name}</span>
+                    <span className="text-gray-900">
+                      {productCategory.name}
+                    </span>
                   </>
                 )}
               </div>
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900">Products</h1>
-                  <p className="mt-1 text-sm text-gray-600">
-                    {path ? `Path: ${path}` : ''} • {products.length} products
-                  </p>
+                  <h1 className="text-3xl font-bold text-gray-900 m-2">
+                    Products
+                  </h1>
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl border border-green-200/60 p-6 shadow-lg">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-green-500 rounded-xl">
+                        <svg
+                          className="w-6 h-6 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 11H5m14-7H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-green-700">
+                          Total Products
+                        </p>
+                        <p className="text-2xl font-bold text-green-900">
+                          {products.length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -174,4 +224,3 @@ export default function ProductsPage() {
     </>
   );
 }
-

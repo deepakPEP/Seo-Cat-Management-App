@@ -37,6 +37,42 @@ export class MarketingController {
     };
   }
 
+  // Get all counts (for categories page)
+  @Get('counts/all')
+  @Roles('admin', 'category_manager', 'pepagora_manager', 'marketing_team')
+  async getAllCounts() {
+    const counts = await this.marketingService.getAllCounts();
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'All counts fetched successfully',
+      data: counts,
+    };
+  }
+
+  // Get counts by category (for subcategories page)
+  @Get('categories/:categoryId/counts')
+  @Roles('admin', 'category_manager', 'pepagora_manager', 'marketing_team')
+  async getCountsByCategory(@Param('categoryId') categoryId: string) {
+    const counts = await this.marketingService.getCountsByCategory(categoryId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Category counts fetched successfully',
+      data: counts,
+    };
+  }
+
+  // Get product count by subcategory (for product categories page)
+  @Get('subcategories/:subcategoryId/product-count')
+  @Roles('admin', 'category_manager', 'pepagora_manager', 'marketing_team')
+  async getProductCountBySubcategory(@Param('subcategoryId') subcategoryId: string) {
+    const counts = await this.marketingService.getProductCountBySubcategory(subcategoryId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Subcategory product count fetched successfully',
+      data: counts,
+    };
+  }
+
   // View-only endpoints for marketing team
   @Get('categories')
   @Roles('admin', 'category_manager', 'pepagora_manager', 'marketing_team')

@@ -99,6 +99,112 @@ export class MarketingService {
     }
   }
 
+  // Get total counts for all categories (for categories page)
+  async getAllCounts() {
+    try {
+      const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
+      const productCategoriesCollection = this.metaDb.collection<ProductCategoryDocument>('productcategories');
+      const liveProductsCollection = this.metaDb.collection<LiveProductDocument>('liveproducts');
+
+      const [subcategoriesCount, productCategoriesCount, productsCount] = await Promise.all([
+        subcategoriesCollection.countDocuments(),
+        productCategoriesCollection.countDocuments(),
+        liveProductsCollection.countDocuments(),
+      ]);
+
+      return {
+        subcategoriesCount,
+        productCategoriesCount,
+        productsCount,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch all counts');
+    }
+  }
+
+  // Get counts for a specific category (for subcategories page)
+  async getCountsByCategory(categoryId: string) {
+    try {
+      const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
+      const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
+      const productCategoriesCollection = this.metaDb.collection<ProductCategoryDocument>('productcategories');
+      const liveProductsCollection = this.metaDb.collection<LiveProductDocument>('liveproducts');
+
+      const categoryObjectId = this.toObjectId(categoryId);
+      if (!categoryObjectId) throw new BadRequestException('Invalid category ID');
+
+      const category = await categoriesCollection.findOne({ _id: categoryObjectId });
+      if (!category) throw new BadRequestException('Category not found');
+
+      // Get all subcategories for this category
+      const mappedChildren = Array.isArray(category.mappedChildren)
+        ? category.mappedChildren
+        : [];
+
+      const subcategoryObjectIds = mappedChildren
+        .map((child) => this.toObjectId(child as string | ObjectId))
+        .filter((id): id is ObjectId => id !== null);
+
+      // Get all product categories for these subcategories
+      const productCategories = subcategoryObjectIds.length
+        ? await productCategoriesCollection
+            .find({ parentId: { $in: subcategoryObjectIds } })
+            .toArray()
+        : [];
+
+      const productCategoryObjectIds = productCategories.map((pc) => pc._id);
+
+      // Get product count for these product categories
+      const productsCount = productCategoryObjectIds.length
+        ? await liveProductsCollection.countDocuments({
+            'productCategory._id': { $in: productCategoryObjectIds },
+          })
+        : 0;
+
+      return {
+        productCategoriesCount: productCategories.length,
+        productsCount,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch counts by category');
+    }
+  }
+
+  // Get product count for a specific subcategory (for product categories page)
+  async getProductCountBySubcategory(subcategoryId: string) {
+    try {
+      const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
+      const productCategoriesCollection = this.metaDb.collection<ProductCategoryDocument>('productcategories');
+      const liveProductsCollection = this.metaDb.collection<LiveProductDocument>('liveproducts');
+
+      const subcategoryObjectId = this.toObjectId(subcategoryId);
+      if (!subcategoryObjectId) throw new BadRequestException('Invalid subcategory ID');
+
+      const subcategory = await subcategoriesCollection.findOne({ _id: subcategoryObjectId });
+      if (!subcategory) throw new BadRequestException('Subcategory not found');
+
+      // Get all product categories for this subcategory
+      const productCategories = await productCategoriesCollection
+        .find({ parentId: subcategoryObjectId })
+        .toArray();
+
+      const productCategoryObjectIds = productCategories.map((pc) => pc._id);
+
+      // Get product count for these product categories
+      const productsCount = productCategoryObjectIds.length
+        ? await liveProductsCollection.countDocuments({
+            'productCategory._id': { $in: productCategoryObjectIds },
+          })
+        : 0;
+
+      return {
+        productsCount,
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch product count by subcategory');
+    }
+  }
+
   // Get all categories (for marketing team view)
   async getCategoriesForMarketing() {
     try {

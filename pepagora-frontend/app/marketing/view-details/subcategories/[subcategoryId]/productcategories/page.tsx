@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import Sidebar from '@/components/Sidebar';
-import axiosInstance from '../../../../../../lib/axiosInstance';
-import { useAuth } from '@/components/hooks/useAuth';
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
+import Sidebar from "@/components/Sidebar";
+import axiosInstance from "../../../../../../lib/axiosInstance";
+import { useAuth } from "@/components/hooks/useAuth";
 
 type ProductCategory = {
   _id: string;
@@ -26,31 +26,40 @@ export default function ProductCategoriesPage() {
   const router = useRouter();
   const params = useParams();
   const subcategoryId = params.subcategoryId as string;
-  
+
   const [collapsed, setCollapsed] = useState(false);
-  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>(
+    []
+  );
   const [subcategory, setSubcategory] = useState<Subcategory | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
   const [loading, setLoading] = useState(true);
+  const [productsCount, setProductsCount] = useState(0);
 
   useEffect(() => {
-    if (!authLoading && userRole !== 'marketing_team') {
-      router.push('/dashboard');
-    }
-  }, [userRole, authLoading, router]);
-
-  useEffect(() => {
-    if (userRole === 'marketing_team' && subcategoryId) {
+    if (!authLoading) {
       fetchData();
     }
-  }, [userRole, subcategoryId]);
+  }, [authLoading]);
+
+  useEffect(() => {
+    if (subcategoryId) {
+      fetchData();
+    }
+  }, [subcategoryId]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const productCategoriesRes = await axiosInstance.get(`/marketing/subcategories/${subcategoryId}/productcategories`);
+      // Fetch product categories and product count in parallel
+      const [productCategoriesRes, productCountRes] = await Promise.all([
+        axiosInstance.get(`/marketing/subcategories/${subcategoryId}/productcategories`),
+        axiosInstance.get(`/marketing/subcategories/${subcategoryId}/product-count`),
+      ]);
+      
       // Response interceptor wraps the data
-      const responseData = productCategoriesRes.data?.data || productCategoriesRes.data;
+      const responseData =
+        productCategoriesRes.data?.data || productCategoriesRes.data;
       const productCategoryData = Array.isArray(responseData?.data)
         ? responseData.data
         : Array.isArray(responseData)
@@ -64,9 +73,13 @@ export default function ProductCategoriesPage() {
       if (responseData?.category) {
         setCategory(responseData.category);
       }
+
+      // Get product count
+      const countData = productCountRes.data?.data?.data || productCountRes.data?.data || {};
+      setProductsCount(countData.productsCount ?? 0);
     } catch (err) {
-      console.error('Error fetching data:', err);
       setProductCategories([]);
+      setProductsCount(0);
     } finally {
       setLoading(false);
     }
@@ -80,25 +93,37 @@ export default function ProductCategoriesPage() {
     );
   }
 
-  const path = category && subcategory ? `${category.name}/${subcategory.name}/` : '';
+  const path =
+    category && subcategory ? `${category.name}/${subcategory.name}/` : "";
 
   return (
     <>
       <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
-      <div className={`transition-all duration-300 ${collapsed ? 'ml-20' : 'ml-80'} min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100`}>
+      <div
+        className={`transition-all duration-300 ${
+          collapsed ? "ml-20" : "ml-80"
+        } min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100`}
+      >
         {/* Header */}
         <div className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="py-6">
               <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                <button onClick={() => router.push('/marketing/view-details')} className="hover:text-blue-600">
+                <button
+                  onClick={() => router.push("/marketing/view-details")}
+                  className="hover:text-blue-600"
+                >
                   Categories
                 </button>
                 {category && (
                   <>
                     <span>/</span>
-                    <button 
-                      onClick={() => router.push(`/marketing/view-details/categories/${category._id}/subcategories`)} 
+                    <button
+                      onClick={() =>
+                        router.push(
+                          `/marketing/view-details/categories/${category._id}/subcategories`
+                        )
+                      }
                       className="hover:text-blue-600"
                     >
                       {category.name}
@@ -114,10 +139,65 @@ export default function ProductCategoriesPage() {
               </div>
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900">Product Categories</h1>
-                  <p className="mt-1 text-sm text-gray-600">
-                    {path && `Path: ${path}`} • {productCategories.length} product categories
-                  </p>
+                  <h1 className="text-3xl font-bold text-gray-900 m-2">
+                    Product Categories
+                  </h1>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl border border-green-200/60 p-6 shadow-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-green-500 rounded-xl">
+                          <svg
+                            className="w-6 h-6 text-white"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 11H5m14-7H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"
+                            />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-green-700">
+                            Total Product Categories
+                          </p>
+                          <p className="text-2xl font-bold text-green-900">
+                            {productCategories.length}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl border border-blue-200/60 p-6 shadow-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-500 rounded-xl">
+                          <svg
+                            className="w-6 h-6 text-white"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 11H5m14-7H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"
+                            />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-blue-700">
+                            Total Products
+                          </p>
+                          <p className="text-2xl font-bold text-blue-900">
+                            {productsCount.toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -137,15 +217,29 @@ export default function ProductCategoriesPage() {
                   {productCategories.map((productCategory) => (
                     <button
                       key={productCategory._id}
-                      onClick={() => router.push(`/marketing/view-details/productcategories/${productCategory._id}/products`)}
+                      onClick={() =>
+                        router.push(
+                          `/marketing/view-details/productcategories/${productCategory._id}/products`
+                        )
+                      }
                       className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group"
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-lg font-medium text-gray-900 group-hover:text-blue-600">
                           {productCategory.name}
                         </span>
-                        <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        <svg
+                          className="w-5 h-5 text-gray-400 group-hover:text-blue-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5l7 7-7 7"
+                          />
                         </svg>
                       </div>
                     </button>
@@ -159,4 +253,3 @@ export default function ProductCategoriesPage() {
     </>
   );
 }
-
