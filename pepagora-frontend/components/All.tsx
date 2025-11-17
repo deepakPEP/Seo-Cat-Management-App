@@ -19,7 +19,7 @@ export default function CategoryHeaderPage() {
   // Fetch categories on load
   useEffect(() => {
     axios
-      .get('http://localhost:4000/categories', {
+      .get('http://localhost:8000/categories', {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => setCategories(res.data))
@@ -38,7 +38,7 @@ export default function CategoryHeaderPage() {
     }
 
     axios
-      .get(`http://localhost:4000/categories/${selectedCategory}`, {
+      .get(`http://localhost:8000/categories/${selectedCategory}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
@@ -72,7 +72,7 @@ export default function CategoryHeaderPage() {
     formData.append('metaDescription', metaDescription);
 
     try {
-      await axios.post('http://localhost:4000/category-header', formData, {
+      await axios.post('http://localhost:8000/category-header', formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',

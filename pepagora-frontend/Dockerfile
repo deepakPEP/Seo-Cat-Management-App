@@ -25,8 +25,8 @@
 # COPY --from=builder /app/public ./public
 # COPY --from=builder /app/node_modules ./node_modules
 
-# # Expose port 3000
-# EXPOSE 3000
+# # Expose port 7000
+# EXPOSE 7000
 
 # # Start Next.js in production mode
 # CMD ["npm", "run", "dev"]
@@ -54,7 +54,7 @@
 # # COPY --from=builder /app/public ./public
 # # # COPY --from=builder /app/next.config.js ./next.config.js
 
-# # EXPOSE 3000
+# # EXPOSE 7000
 
 # # CMD ["npm", "start"]
 
@@ -74,7 +74,7 @@ RUN npm install
 COPY . .
 
 # Expose dev port
-EXPOSE 3000
+EXPOSE 7000
 
 # Start Next.js in development mode
 CMD ["npm", "run", "dev"]

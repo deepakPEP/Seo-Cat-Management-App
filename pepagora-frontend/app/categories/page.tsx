@@ -15,6 +15,9 @@ import { LuSave, LuPlus } from 'react-icons/lu';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactTextEditor from '@/components/RichTextEditor';
 import { ListVideo } from 'lucide-react';
+import HierarchicalFilterSidebar from '@/components/HierarchicalFilterSidebar';
+import HierarchicalBreadcrumb from '@/components/HierarchicalBreadcrumb';
+import { FiChevronDown, FiChevronRight } from 'react-icons/fi';
 
 // ---- Types ----
 
@@ -28,6 +31,37 @@ type Category = {
   liveUrl?: string;
   metaChildren?: string[];
   description?: string;
+};
+
+type Subcategory = {
+  _id: string;
+  name?: string;
+  sub_cat_name?: string;
+  metaTitle?: string;
+  metaKeyword?: string;
+  metaDescription?: string;
+  imageUrl?: string;
+  image?: string;
+  mappedParent?: string;
+  mappedChildren?: string[];
+  description?: string;
+};
+
+type ProductCategory = {
+  _id: string;
+  name: string;
+  metaTitle?: string;
+  metaKeyword?: string;
+  metaDescription?: string;
+  imageUrl?: string;
+  mappedParent?: string;
+  description?: string;
+};
+
+type FilterSelection = {
+  category: Category | null;
+  subcategory: Subcategory | null;
+  productCategory: ProductCategory | null;
 };
 
 type TokenPayload = {
@@ -50,11 +84,43 @@ function downloadResponseTxt(content: string) {
   URL.revokeObjectURL(url);
 }
 
+// Helper to extract JSON from AI response (handles markdown code blocks)
+function extractJSON(text: string): any {
+  try {
+    // First try direct parse
+    return JSON.parse(text);
+  } catch {
+    // Try to extract from markdown code blocks
+    const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[1]);
+    }
+    // Try to find JSON object directly
+    const jsonObjMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonObjMatch) {
+      return JSON.parse(jsonObjMatch[0]);
+    }
+    throw new Error('No valid JSON found');
+  }
+}
+
 export default function CategoriesPage() {
   // Sidebar collapse state for responsive layout
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // ---- Hierarchical Filter State ----
+  const [filterSelection, setFilterSelection] = useState<FilterSelection>({
+    category: null,
+    subcategory: null,
+    productCategory: null,
+  });
+  const [displayItems, setDisplayItems] = useState<any[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  
   // ---- Data & Auth ----
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
 
@@ -119,7 +185,7 @@ export default function CategoriesPage() {
       if (aiText) {
         downloadResponseTxt(aiText);
         try {
-          const json = JSON.parse(aiText);
+          const json = extractJSON(aiText);
           // Fill fields from JSON
           setEditForm(prev => ({
             ...prev,
@@ -171,7 +237,7 @@ export default function CategoriesPage() {
       if (aiText) {
         downloadResponseTxt(aiText);
         try {
-          const json = JSON.parse(aiText);
+          const json = extractJSON(aiText);
           setMetaTitle(json.by_lang?.['<lang>']?.meta?.title || metaTitle);
           setMetaKeyword((json.keywords?.head || []).join(', '));
           setMetaDescription(json.by_lang?.['<lang>']?.meta?.description || metaDescription);
@@ -242,6 +308,63 @@ export default function CategoriesPage() {
 
   const router = useRouter();
 
+  // ---- Helper Functions ----
+  const getCurrentLevel = () => {
+    if (filterSelection.productCategory) return 'productCategory';
+    if (filterSelection.subcategory) return 'subcategory';
+    if (filterSelection.category) return 'category';
+    return 'all';
+  };
+
+  const getName = (item: any) => {
+    return item?.name || item?.main_cat_name || item?.sub_cat_name || 'Unnamed';
+  };
+
+  const getImageUrl = (item: any) => {
+    return item?.imageUrl || item?.image || item?.main_cat_image || item?.sub_cat_img_url || '';
+  };
+
+  const handleFilterChange = (selection: FilterSelection) => {
+    setFilterSelection(selection);
+  };
+
+  const handleBreadcrumbNavigate = (level: 'home' | 'category' | 'subcategory') => {
+    if (level === 'home') {
+      setFilterSelection({ category: null, subcategory: null, productCategory: null });
+    } else if (level === 'category') {
+      setFilterSelection({ ...filterSelection, subcategory: null, productCategory: null });
+    } else if (level === 'subcategory') {
+      setFilterSelection({ ...filterSelection, productCategory: null });
+    }
+  };
+
+  const toggleRowExpansion = (id: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleRowClick = async (item: any) => {
+    const currentLevel = getCurrentLevel();
+    
+    if (currentLevel === 'all') {
+      // Clicking a category - fetch its subcategories
+      setFilterSelection({ category: item, subcategory: null, productCategory: null });
+    } else if (currentLevel === 'category') {
+      // Clicking a subcategory - fetch its product categories
+      setFilterSelection({ ...filterSelection, subcategory: item, productCategory: null });
+    } else if (currentLevel === 'subcategory') {
+      // Clicking a product category - just select it
+      setFilterSelection({ ...filterSelection, productCategory: item });
+    }
+  };
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("accessToken");
@@ -261,6 +384,67 @@ export default function CategoriesPage() {
     fetchCategories(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
+
+  // Fetch subcategories when category is selected
+  useEffect(() => {
+    const fetchSubcategories = async () => {
+      if (!filterSelection.category) {
+        setSubcategories([]);
+        return;
+      }
+      try {
+        const res = await axiosInstance.get(`/categories/${filterSelection.category._id}/subcategories`);
+        const responseData = res.data?.data || res.data;
+        const subcategoriesData = responseData?.data || responseData;
+        setSubcategories(Array.isArray(subcategoriesData) ? subcategoriesData : []);
+      } catch (err) {
+        console.error('Error fetching subcategories:', err);
+        setSubcategories([]);
+      }
+    };
+    fetchSubcategories();
+  }, [filterSelection.category]);
+
+  // Fetch product categories when subcategory is selected
+  useEffect(() => {
+    const fetchProductCategories = async () => {
+      if (!filterSelection.subcategory) {
+        setProductCategories([]);
+        return;
+      }
+      try {
+        const res = await axiosInstance.get(`/subcategories/${filterSelection.subcategory._id}/productcategories`);
+        let data = [];
+        if (res.data?.data?.data) {
+          data = res.data.data.data;
+        } else if (Array.isArray(res.data?.data)) {
+          data = res.data.data;
+        } else if (Array.isArray(res.data)) {
+          data = res.data;
+        }
+        setProductCategories(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Error fetching product categories:', err);
+        setProductCategories([]);
+      }
+    };
+    fetchProductCategories();
+  }, [filterSelection.subcategory]);
+
+  // Update displayItems based on filter selection
+  useEffect(() => {
+    const currentLevel = getCurrentLevel();
+    
+    if (currentLevel === 'productCategory') {
+      setDisplayItems(productCategories);
+    } else if (currentLevel === 'subcategory') {
+      setDisplayItems(productCategories);
+    } else if (currentLevel === 'category') {
+      setDisplayItems(subcategories);
+    } else {
+      setDisplayItems(categories);
+    }
+  }, [filterSelection, categories, subcategories, productCategories]);
 
   // ---- API calls ----
   const fetchCategories = async (currentPage: number) => {
@@ -385,31 +569,63 @@ export default function CategoriesPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await axiosInstance.delete(`/categories/${id}`);
-      if (res.status === 200) {
-        toast.success('Category deleted successfully!');
-      }
-      if (categories.length === 1 && page > 1) {
-        setPage(page - 1);
+      const currentLevel = getCurrentLevel();
+      let endpoint = '';
+      let successMsg = '';
+
+      if (currentLevel === 'productCategory' || (filterSelection.subcategory && !filterSelection.productCategory)) {
+        endpoint = `/productcategories/${id}`;
+        successMsg = 'Product category deleted successfully!';
+      } else if (currentLevel === 'subcategory' || (filterSelection.category && !filterSelection.subcategory)) {
+        endpoint = `/subcategories/${id}`;
+        successMsg = 'Subcategory deleted successfully!';
       } else {
-        fetchCategories(page);
+        endpoint = `/categories/${id}`;
+        successMsg = 'Category deleted successfully!';
+      }
+
+      const res = await axiosInstance.delete(endpoint);
+      if (res.status === 200) {
+        toast.success(successMsg);
+      }
+      
+      // Refresh the appropriate list
+      if (currentLevel === 'productCategory') {
+        if (filterSelection.subcategory) {
+          const res = await axiosInstance.get(`/subcategories/${filterSelection.subcategory._id}/productcategories`);
+          let data = res.data?.data?.data || res.data?.data || res.data;
+          setProductCategories(Array.isArray(data) ? data : []);
+        }
+      } else if (currentLevel === 'subcategory') {
+        if (filterSelection.category) {
+          const res = await axiosInstance.get(`/categories/${filterSelection.category._id}/subcategories`);
+          const responseData = res.data?.data || res.data;
+          const subcategoriesData = responseData?.data || responseData;
+          setSubcategories(Array.isArray(subcategoriesData) ? subcategoriesData : []);
+        }
+      } else {
+        if (categories.length === 1 && page > 1) {
+          setPage(page - 1);
+        } else {
+          fetchCategories(page);
+        }
       }
     } catch (err) {
-      toast.error('Failed to delete category');
+      toast.error('Failed to delete');
       console.error('Delete failed:', err);
     }
   };
 
-  const openEdit = (cat: Category) => {
-    setSelectedCategory(cat);
+  const openEdit = (item: any) => {
+    setSelectedCategory(item);
     setEditForm({
-      name: cat.name,
-      metaTitle: cat.metaTitle || '',
-      metaKeyword: cat.metaKeyword || '',
-      metaDescription: cat.metaDescription || '',
-      description: cat.description || '',
-      imageUrl: cat.imageUrl || '',
-      liveUrl: cat.liveUrl || ''
+      name: getName(item),
+      metaTitle: item.metaTitle || '',
+      metaKeyword: item.metaKeyword || '',
+      metaDescription: item.metaDescription || '',
+      description: item.description || '',
+      imageUrl: getImageUrl(item) || '',
+      liveUrl: item.liveUrl || ''
     });
     setShowEditModal(true);
   };
@@ -417,25 +633,90 @@ export default function CategoriesPage() {
   const saveEdit = async () => {
     if (!selectedCategory) return;
     try {
-      const payload = {
-        main_cat_name: editForm.name, // Fixed: Use main_cat_name instead of name for backend compatibility
-        metaTitle: editForm.metaTitle,
-        metaDescription: editForm.metaDescription,
-        metaKeyword: editForm.metaKeyword,
-        description: editForm.description,
-        imageUrl: editForm.imageUrl || '', // Include imageUrl if available
-      };
-      const res = await axiosInstance.put(`/categories/${selectedCategory._id}`, payload);
-      if (res.status === 200) {
-        toast.success(`Category ${editForm.name} updated successfully!`);
+      const currentLevel = getCurrentLevel();
+      let endpoint = '';
+      let payload: any = {};
+      let httpMethod: 'put' | 'patch' = 'put';
+      let successMsg = '';
+
+      // Determine which type of item we're editing based on currentLevel
+      if (currentLevel === 'productCategory') {
+        // Editing a product category
+        endpoint = `/productcategories/${selectedCategory._id}`;
+        httpMethod = 'patch';
+        payload = {
+          name: editForm.name,
+          metaTitle: editForm.metaTitle,
+          metaDescription: editForm.metaDescription,
+          metaKeyword: editForm.metaKeyword,
+          description: editForm.description,
+          imageUrl: editForm.imageUrl || '',
+        };
+        successMsg = `Product category ${editForm.name} updated successfully!`;
+      } else if (currentLevel === 'subcategory') {
+        // Editing a subcategory
+        endpoint = `/subcategories/${selectedCategory._id}`;
+        payload = {
+          name: editForm.name,
+          metaTitle: editForm.metaTitle,
+          metaDescription: editForm.metaDescription,
+          metaKeyword: editForm.metaKeyword,
+          description: editForm.description,
+          sub_cat_img_url: editForm.imageUrl || '',
+          mappedParent: (selectedCategory as any).mappedParent,
+        };
+        successMsg = `Subcategory ${editForm.name} updated successfully!`;
+      } else {
+        // Editing a category (currentLevel === 'category' or 'all')
+        endpoint = `/categories/${selectedCategory._id}`;
+        payload = {
+          main_cat_name: editForm.name,
+          metaTitle: editForm.metaTitle,
+          metaDescription: editForm.metaDescription,
+          metaKeyword: editForm.metaKeyword,
+          description: editForm.description,
+          imageUrl: editForm.imageUrl || '',
+        };
+        successMsg = `Category ${editForm.name} updated successfully!`;
+      }
+
+      const res = httpMethod === 'patch' 
+        ? await axiosInstance.patch(endpoint, payload)
+        : await axiosInstance.put(endpoint, payload);
+        
+      if (res.status === 200 || res.status === 201) {
+        toast.success(successMsg);
         setShowEditModal(false);
         setSelectedCategory(null);
-        fetchCategories(page);
+        
+        // Update local state immediately to reflect changes in UI
+        if (currentLevel === 'productCategory' && filterSelection.subcategory) {
+          // Update local productCategories with edited item
+          setProductCategories(prev => prev.map(item => 
+            item._id === selectedCategory._id 
+              ? { ...item, ...payload, _id: item._id }
+              : item
+          ));
+        } else if (currentLevel === 'subcategory' && filterSelection.category) {
+          // Update local subcategories with edited item
+          setSubcategories(prev => prev.map(item => 
+            item._id === selectedCategory._id 
+              ? { ...item, ...payload, _id: item._id }
+              : item
+          ));
+        } else {
+          // Update local categories with edited item
+          setCategories(prev => prev.map(item => 
+            item._id === selectedCategory._id 
+              ? { ...item, ...payload, _id: item._id }
+              : item
+          ));
+        }
       } else {
-        toast.error('Failed to update category');
+        toast.error('Failed to update');
       }
     } catch (err) {
-      toast.error('Failed to update category');
+      toast.error('Failed to update');
       console.error('Update failed:', err);
     }
   };
@@ -552,8 +833,12 @@ export default function CategoriesPage() {
                     </svg>
                   </div>
                   <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Categories</h1>
-                    <p className="text-slate-600 font-medium">Organize and manage your categories</p>
+                    <h1 className="text-3xl font-bold text-slate-900">
+                      {getCurrentLevel() === 'productCategory' ? 'Product Categories' :
+                       getCurrentLevel() === 'subcategory' ? 'Subcategories' :
+                       getCurrentLevel() === 'category' ? 'Subcategories' : 'Categories'}
+                    </h1>
+                    <p className="text-slate-600 font-medium">Organize and manage your hierarchical data</p>
                   </div>
                 </div>
               </div>
@@ -584,6 +869,17 @@ export default function CategoriesPage() {
             </div>
           </div>
 
+          {/* Hierarchical Filter and Breadcrumb */}
+          <HierarchicalFilterSidebar
+            onFilterChange={handleFilterChange}
+            currentSelection={filterSelection}
+          />
+          
+          <HierarchicalBreadcrumb
+            selection={filterSelection}
+            onNavigate={handleBreadcrumbNavigate}
+          />
+
           {/* Enhanced Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl border border-green-200/60 p-6 shadow-lg">
@@ -594,8 +890,11 @@ export default function CategoriesPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-green-700">Total Categories</p>
-                  <p className="text-2xl font-bold text-green-900">{categories.length}</p>
+                  <p className="text-sm font-medium text-green-700">
+                    {getCurrentLevel() === 'productCategory' ? 'Total Product Categories' :
+                     getCurrentLevel() === 'subcategory' || getCurrentLevel() === 'category' ? 'Total Subcategories' : 'Total Categories'}
+                  </p>
+                  <p className="text-2xl font-bold text-green-900">{displayItems.length}</p>
                 </div>
               </div>
             </div>
@@ -669,19 +968,20 @@ export default function CategoriesPage() {
                   )}
 
                   {!loading &&
-                    categories.map((cat, index) => (
+                    displayItems.map((item, index) => (
                       <tr
-                        key={cat._id}
-                        className="hover:bg-slate-50/80 transition-colors duration-200"
+                        key={item._id}
+                        onClick={() => handleRowClick(item)}
+                        className="hover:bg-slate-50/80 transition-colors duration-200 cursor-pointer"
                       >
                         {/* Image */}
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                           <div className="flex-shrink-0">
-                            {cat.imageUrl ? (
-                              <a href={cat.imageUrl} target="_blank" rel="noopener noreferrer">
+                            {getImageUrl(item) ? (
+                              <a href={getImageUrl(item)} target="_blank" rel="noopener noreferrer">
                                 <img
-                                  src={cat.imageUrl}
-                                  alt={cat.name}
+                                  src={getImageUrl(item)}
+                                  alt={getName(item)}
                                   className="h-14 w-14 rounded-xl object-cover border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-200"
                                 />
                               </a>
@@ -693,23 +993,28 @@ export default function CategoriesPage() {
                           </div>
                         </td>
 
-                        {/* Category */}
+                        {/* Name with chevron for navigation */}
                         <td className="px-6 py-4">
-                          <div>
-                            <div className="font-semibold text-slate-900 text-base">{cat.name}</div>
-                            {cat.metaChildren && cat.metaChildren.length > 0 && (
-                              <div className="text-sm text-slate-500 mt-1">
-                                {cat.metaChildren.length} subcategories
-                              </div>
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <div className="font-semibold text-slate-900 text-base">{getName(item)}</div>
+                              {item.mappedChildren && item.mappedChildren.length > 0 && (
+                                <div className="text-sm text-slate-500 mt-1">
+                                  {item.mappedChildren.length} {getCurrentLevel() === 'all' ? 'subcategories' : 'items'}
+                                </div>
+                              )}
+                            </div>
+                            {getCurrentLevel() !== 'productCategory' && (
+                              <FiChevronRight className="w-5 h-5 text-slate-400" />
                             )}
                           </div>
                         </td>
 
                         {/* Meta Title - Enhanced */}
-                        <td className="px-6 py-4 max-w-xs">
+                        <td className="px-6 py-4 max-w-xs" onClick={(e) => e.stopPropagation()}>
                           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-h-20 overflow-y-auto hover:bg-blue-100 transition-colors duration-200">
                             <p className="text-sm text-blue-900 font-medium break-words">
-                              {cat.metaTitle || (
+                              {item.metaTitle || (
                                 <span className="text-slate-400 italic">No meta title</span>
                               )}
                             </p>
@@ -717,10 +1022,10 @@ export default function CategoriesPage() {
                         </td>
 
                         {/* Meta Keywords - Enhanced */}
-                        <td className="px-6 py-4 max-w-xs">
+                        <td className="px-6 py-4 max-w-xs" onClick={(e) => e.stopPropagation()}>
                           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 max-h-20 overflow-y-auto hover:bg-purple-100 transition-colors duration-200">
                             <p className="text-sm text-purple-900 break-words">
-                              {cat.metaKeyword || (
+                              {item.metaKeyword || (
                                 <span className="text-slate-400 italic">No meta keywords</span>
                               )}
                             </p>
@@ -728,10 +1033,10 @@ export default function CategoriesPage() {
                         </td>
 
                         {/* Meta Description - Enhanced */}
-                        <td className="px-6 py-4 max-w-sm">
+                        <td className="px-6 py-4 max-w-sm" onClick={(e) => e.stopPropagation()}>
                           <div className="bg-green-50 border border-green-200 rounded-lg p-3 max-h-20 overflow-y-auto hover:bg-green-100 transition-colors duration-200">
                             <p className="text-sm text-green-900 break-words">
-                              {cat.metaDescription || (
+                              {item.metaDescription || (
                                 <span className="text-slate-400 italic">No meta description</span>
                               )}
                             </p>
@@ -740,19 +1045,19 @@ export default function CategoriesPage() {
 
                         {/* Actions - Enhanced */}
                         {!isManagerViewOnly && (
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-2 flex-wrap">
                               <button
-                                onClick={() => openEdit(cat)}
+                                onClick={(e) => { e.stopPropagation(); openEdit(item); }}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition-all duration-200 hover:scale-105"
                               >
                                 <TbEdit className="w-4 h-4" />
                                 Edit
                               </button>
                               
-                              {(!cat.metaTitle || !cat.metaKeyword || !cat.metaDescription) && (
+                              {(!item.metaTitle || !item.metaKeyword || !item.metaDescription) && (
                                 <button
-                                  onClick={() => generateMetaForCategory(cat)}
+                                  onClick={(e) => { e.stopPropagation(); getCurrentLevel() === 'all' ? generateMetaForCategory(item) : null; }}
                                   className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg shadow-sm transition-all duration-200 hover:scale-105"
                                 >
                                   🤖 Meta
@@ -760,8 +1065,9 @@ export default function CategoriesPage() {
                               )}
                               
                               <button
-                                onClick={() => {
-                                  setSelectedCategory(cat);
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedCategory(item);
                                   setShowDeleteModal(true);
                                 }}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg shadow-sm transition-all duration-200 hover:scale-105"
@@ -972,7 +1278,8 @@ export default function CategoriesPage() {
                   <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
                     <TbEdit className="w-5 h-5 text-white" />
                   </div>
-                  Edit Category
+                  Edit {getCurrentLevel() === 'productCategory' || (filterSelection.subcategory && !filterSelection.productCategory) ? 'Product Category' :
+                       getCurrentLevel() === 'subcategory' || (filterSelection.category && !filterSelection.subcategory) ? 'Subcategory' : 'Category'}
                 </h2>
                 <button 
                   onClick={() => setShowEditModal(false)} 

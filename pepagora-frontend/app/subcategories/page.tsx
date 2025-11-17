@@ -1,28 +1,44 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { getPaginationRange } from '@/components/GetPage';
 import axiosInstance from '../../lib/axiosInstance';
 import { jwtDecode } from 'jwt-decode';
 import { toast } from 'react-toastify';
-
-import { MdImageNotSupported } from 'react-icons/md';
 import { TbEdit } from 'react-icons/tb';
 import { RiDeleteBin6Line } from 'react-icons/ri';
 import { LuSave, LuPlus } from 'react-icons/lu';
 import { AnimatePresence, motion } from 'framer-motion';
 import ReactTextEditor from '@/components/RichTextEditor';
+import HierarchicalFilterSidebar from '@/components/HierarchicalFilterSidebar';
+import HierarchicalBreadcrumb from '@/components/HierarchicalBreadcrumb';
+import { FiChevronRight } from 'react-icons/fi';
 
-type Subcategory = {
+type Category = {
   _id: string;
-  name: string;
+  name?: string;
+  main_cat_name?: string;
   metaTitle?: string;
   metaKeyword?: string;
   metaDescription?: string;
-  mappedParent: string; 
+  imageUrl?: string;
+  main_cat_image?: string;
+  mappedChildren?: string[];
+  description?: string;
+};
+
+type Subcategory = {
+  _id: string;
+  name?: string;
+  sub_cat_name?: string;
+  metaTitle?: string;
+  metaKeyword?: string;
+  metaDescription?: string;
+  mappedParent?: string;
   sub_cat_img_url?: string;
+  imageUrl?: string;
+  image?: string;
   mappedChildren?: string[];
   uniqueId?: string;
   liveUrl?: string;
@@ -30,37 +46,23 @@ type Subcategory = {
   annualGrowth?: string;
   averageMargin?: string;
   description?: string;
-  seoContent?: {
-    keywords?: {
-      head?: string[];
-      long_tail?: string[];
-      variants?: string[];
-    };
-    by_lang?: {
-      [key: string]: {
-        intro_html?: string;
-        faqs?: Array<{
-          question?: string;
-          answer_html?: string;
-        }>;
-        llm_text?: string;
-        meta?: {
-          title?: string;
-          description?: string;
-        };
-        schema?: any;
-        links_html?: string;
-      };
-    };
-  };
 };
-type Category = {
+
+type ProductCategory = {
   _id: string;
-  main_cat_name: string;
+  name?: string;
   metaTitle?: string;
   metaKeyword?: string;
   metaDescription?: string;
-  main_cat_image?: string;
+  imageUrl?: string;
+  mappedParent?: string;
+  description?: string;
+};
+
+type FilterSelection = {
+  category: Category | null;
+  subcategory: Subcategory | null;
+  productCategory: ProductCategory | null;
 };
 
 type TokenPayload = {
@@ -70,9 +72,38 @@ type TokenPayload = {
   exp: number;
 };
 
+// Helper to extract JSON from AI response (handles markdown code blocks)
+function extractJSON(text: string): any {
+  try {
+    // First try direct parse
+    return JSON.parse(text);
+  } catch {
+    // Try to extract from markdown code blocks
+    const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[1]);
+    }
+    // Try to find JSON object directly
+    const jsonObjMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonObjMatch) {
+      return JSON.parse(jsonObjMatch[0]);
+    }
+    throw new Error('No valid JSON found');
+  }
+}
+
 export default function SubcategoriesPage() {
   // Sidebar collapse state for responsive layout
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // ---- Hierarchical Filter State ----
+  const [filterSelection, setFilterSelection] = useState<FilterSelection>({
+    category: null,
+    subcategory: null,
+    productCategory: null,
+  });
+  const [displayItems, setDisplayItems] = useState<any[]>([]);
+  
   // DeepSeek API integration
   const DEEPSEEK_API_KEY = 'sk-25f236c2be3a42d49914b903ff908670';
   const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
@@ -128,30 +159,75 @@ export default function SubcategoriesPage() {
       if (aiText) {
         downloadResponseTxt(aiText);
         try {
-          const json = JSON.parse(aiText);
+          const json = extractJSON(aiText);
           setFormMetaTitle(json.by_lang?.['<lang>']?.meta?.title || '');
           setFormMetaKeyword((json.keywords?.head || []).join(', '));
           setFormMetaDescription(json.by_lang?.['<lang>']?.meta?.description || '');
           setFormDescription(json.by_lang?.['<lang>']?.intro_html || '');
           toast.success('Fields rewritten with AI!');
-        } catch (e) {
+        } catch {
           toast.error('AI response is not valid JSON.');
         }
       } else {
         toast.error('AI did not return a result');
       }
-    } catch (err) {
+    } catch {
       toast.error('AI rewrite failed');
     } finally {
       setAiLoading({ metaTitle: false, metaKeyword: false, metaDescription: false, description: false });
     }
   }
-  const router = useRouter();
-
   // --- data
-  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  
+  // ---- Helper Functions ----
+  const getCurrentLevel = () => {
+    if (filterSelection.productCategory) return 'productCategory';
+    if (filterSelection.subcategory) return 'subcategory';
+    if (filterSelection.category) return 'category';
+    return 'all';
+  };
+
+  const getName = (item: any) => {
+    return item?.name || item?.main_cat_name || item?.sub_cat_name || 'Unnamed';
+  };
+
+  const getImageUrl = (item: any) => {
+    return item?.imageUrl || item?.image || item?.main_cat_image || item?.sub_cat_img_url || '';
+  };
+
+  const handleFilterChange = (selection: FilterSelection) => {
+    setFilterSelection(selection);
+  };
+
+  const handleBreadcrumbNavigate = (level: 'home' | 'category' | 'subcategory') => {
+    if (level === 'home') {
+      setFilterSelection({ category: null, subcategory: null, productCategory: null });
+    } else if (level === 'category') {
+      setFilterSelection({ ...filterSelection, subcategory: null, productCategory: null });
+    } else if (level === 'subcategory') {
+      setFilterSelection({ ...filterSelection, productCategory: null });
+    }
+  };
+
+
+  const handleRowClick = async (item: any) => {
+    const currentLevel = getCurrentLevel();
+    
+    if (currentLevel === 'all') {
+      // Clicking a category - fetch its subcategories
+      setFilterSelection({ category: item, subcategory: null, productCategory: null });
+    } else if (currentLevel === 'category') {
+      // Clicking a subcategory - fetch its product categories
+      setFilterSelection({ ...filterSelection, subcategory: item, productCategory: null });
+    } else if (currentLevel === 'subcategory') {
+      // Clicking a product category - just select it
+      setFilterSelection({ ...filterSelection, productCategory: item });
+    }
+  };
 
   // --- pagination & search
   const [page, setPage] = useState<number>(1);
@@ -184,8 +260,6 @@ export default function SubcategoriesPage() {
   const [formMarketSize, setFormMarketSize] = useState('');
   const [formAnnualGrowth, setFormAnnualGrowth] = useState('');
   const [formAverageMargin, setFormAverageMargin] = useState('');
-
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
   if (typeof window !== "undefined") {
@@ -246,6 +320,74 @@ export default function SubcategoriesPage() {
     fetchSubcategories(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, searchQuery]);
+
+  // Fetch subcategories when category is selected
+  useEffect(() => {
+    const fetchSubcategoriesByCategory = async () => {
+      if (!filterSelection.category) {
+        setSubcategories([]);
+        return;
+      }
+      try {
+        const res = await axiosInstance.get(`/categories/${filterSelection.category._id}/subcategories`);
+        const responseData = res.data?.data || res.data;
+        const subcategoriesData = responseData?.data || responseData;
+        setSubcategories(Array.isArray(subcategoriesData) ? subcategoriesData : []);
+      } catch {
+        console.error('Error fetching subcategories');
+        setSubcategories([]);
+      }
+    };
+    fetchSubcategoriesByCategory();
+  }, [filterSelection.category]);
+
+  // Fetch product categories when subcategory is selected
+  useEffect(() => {
+    const fetchProductCategoriesBySubcategory = async () => {
+      if (!filterSelection.subcategory) {
+        setProductCategories([]);
+        return;
+      }
+      try {
+        const res = await axiosInstance.get(`/subcategories/${filterSelection.subcategory._id}/productcategories`);
+        let data = [];
+        if (res.data?.data?.data) {
+          data = res.data.data.data;
+        } else if (Array.isArray(res.data?.data)) {
+          data = res.data.data;
+        } else if (Array.isArray(res.data)) {
+          data = res.data;
+        }
+        setProductCategories(Array.isArray(data) ? data : []);
+      } catch {
+        console.error('Error fetching product categories');
+        setProductCategories([]);
+      }
+    };
+    fetchProductCategoriesBySubcategory();
+  }, [filterSelection.subcategory]);
+
+  // Update displayItems based on filter selection
+  useEffect(() => {
+    const currentLevel = () => {
+      if (filterSelection.productCategory) return 'productCategory';
+      if (filterSelection.subcategory) return 'subcategory';
+      if (filterSelection.category) return 'category';
+      return 'all';
+    };
+    
+    const level = currentLevel();
+    
+    if (level === 'productCategory') {
+      setDisplayItems(productCategories);
+    } else if (level === 'subcategory') {
+      setDisplayItems(productCategories);
+    } else if (level === 'category') {
+      setDisplayItems(subcategories);
+    } else {
+      setDisplayItems(categories);
+    }
+  }, [filterSelection, categories, subcategories, productCategories]);
 
   // Create
   const handleCreate = async (e: React.FormEvent) => {
@@ -377,59 +519,149 @@ export default function SubcategoriesPage() {
   };
 
   // Start edit
-  const startEdit = (s: Subcategory) => {
-    setEditingId(s._id);
-    setFormName(s.name);
-    setFormMetaTitle(s.metaTitle || '');
-    setFormMetaKeyword(s.metaKeyword || '');
-    setFormMetaDescription(s.metaDescription || '');
-    setFormImageUrl(s.sub_cat_img_url || '');
-    setMappedParent(s.mappedParent || null);
-    setFormDescription(s.description || '');
-    setFormLiveUrl(s.liveUrl || '');
-    setFormMarketSize(s.marketSize || '');
-    setFormAnnualGrowth(s.annualGrowth || '');
-    setFormAverageMargin(s.averageMargin || '');
+  const startEdit = (item: any) => {
+    setEditingId(item._id);
+    setFormName(getName(item));
+    setFormMetaTitle(item.metaTitle || '');
+    setFormMetaKeyword(item.metaKeyword || '');
+    setFormMetaDescription(item.metaDescription || '');
+    setFormImageUrl(getImageUrl(item));
+    setMappedParent(item.mappedParent || null);
+    setFormDescription(item.description || '');
+    setFormLiveUrl(item.liveUrl || '');
+    setFormMarketSize(item.marketSize || '');
+    setFormAnnualGrowth(item.annualGrowth || '');
+    setFormAverageMargin(item.averageMargin || '');
     setShowEditModal(true);
   };
 
   const saveEdit = async () => {
     if (!editingId) return;
     try {
-      await axiosInstance.put(`/subcategories/${editingId}`, {
-        name: formName,
-        metaTitle: formMetaTitle,
-        metaKeyword: formMetaKeyword,
-        metaDescription: formMetaDescription,
-        sub_cat_img_url: formImageUrl,
-        mappedParent: mappedParent,
-        description: formDescription,
-        liveUrl: formLiveUrl,
-        marketSize: formMarketSize,
-        annualGrowth: formAnnualGrowth,
-        averageMargin: formAverageMargin,
-      });
-      toast.success('Subcategory updated');
-      setShowEditModal(false);
-      setEditingId(null);
-      fetchSubcategories(page);
-    } catch {
+      const currentLevel = getCurrentLevel();
+      let endpoint = '';
+      let payload: any = {};
+      let httpMethod: 'put' | 'patch' = 'put';
+
+      if (currentLevel === 'productCategory') {
+        // Editing a product category
+        endpoint = `/productcategories/${editingId}`;
+        httpMethod = 'patch';
+        payload = {
+          name: formName,
+          metaTitle: formMetaTitle,
+          metaKeyword: formMetaKeyword,
+          metaDescription: formMetaDescription,
+          imageUrl: formImageUrl,
+          description: formDescription,
+        };
+      } else if (currentLevel === 'subcategory') {
+        // Editing a subcategory
+        endpoint = `/subcategories/${editingId}`;
+        payload = {
+          name: formName,
+          metaTitle: formMetaTitle,
+          metaKeyword: formMetaKeyword,
+          metaDescription: formMetaDescription,
+          sub_cat_img_url: formImageUrl,
+          mappedParent: mappedParent,
+          description: formDescription,
+          liveUrl: formLiveUrl,
+          marketSize: formMarketSize,
+          annualGrowth: formAnnualGrowth,
+          averageMargin: formAverageMargin,
+        };
+      } else {
+        // Editing a category
+        endpoint = `/categories/${editingId}`;
+        payload = {
+          main_cat_name: formName,
+          metaTitle: formMetaTitle,
+          metaKeyword: formMetaKeyword,
+          metaDescription: formMetaDescription,
+          imageUrl: formImageUrl,
+          description: formDescription,
+        };
+      }
+
+      const res = httpMethod === 'patch' 
+        ? await axiosInstance.patch(endpoint, payload)
+        : await axiosInstance.put(endpoint, payload);
+      
+      if (res.status === 200 || res.status === 201) {
+        toast.success('Updated successfully');
+        setShowEditModal(false);
+        setEditingId(null);
+        
+        // Update local state immediately to reflect changes in UI
+        if (currentLevel === 'productCategory') {
+          setProductCategories(prev => prev.map(item => 
+            item._id === editingId 
+              ? { ...item, ...payload, _id: item._id }
+              : item
+          ));
+        } else if (currentLevel === 'subcategory') {
+          setSubcategories(prev => prev.map(item => 
+            item._id === editingId 
+              ? { ...item, ...payload, _id: item._id }
+              : item
+          ));
+        } else {
+          setCategories(prev => prev.map(item => 
+            item._id === editingId 
+              ? { ...item, ...payload, _id: item._id }
+              : item
+          ));
+        }
+      } else {
+        toast.error('Update failed');
+      }
+    } catch (err) {
       toast.error('Update failed');
+      console.error('Update error:', err);
     }
   };
 
   const handleDelete = async () => {
     if (!deletingId) return;
     try {
-      await axiosInstance.delete(`/subcategories/${deletingId}`);
+      const currentLevel = getCurrentLevel();
+      let endpoint = '';
+
+      if (currentLevel === 'productCategory' || (filterSelection.subcategory && !filterSelection.productCategory)) {
+        endpoint = `/productcategories/${deletingId}`;
+      } else if (currentLevel === 'subcategory' || (filterSelection.category && !filterSelection.subcategory)) {
+        endpoint = `/subcategories/${deletingId}`;
+      } else {
+        endpoint = `/categories/${deletingId}`;
+      }
+
+      await axiosInstance.delete(endpoint);
       toast.success('Deleted');
       setShowDeleteModal(false);
       setDeletingId(null);
-      if (subcategories.length === 1 && page > 1) {
-        setPage(page - 1);
-        fetchSubcategories(page - 1);
+      
+      // Refresh the appropriate list
+      if (currentLevel === 'productCategory') {
+        if (filterSelection.subcategory) {
+          const res = await axiosInstance.get(`/subcategories/${filterSelection.subcategory._id}/productcategories`);
+          const data = res.data?.data?.data || res.data?.data || res.data;
+          setProductCategories(Array.isArray(data) ? data : []);
+        }
+      } else if (currentLevel === 'subcategory') {
+        if (filterSelection.category) {
+          const res = await axiosInstance.get(`/categories/${filterSelection.category._id}/subcategories`);
+          const responseData = res.data?.data || res.data;
+          const subcategoriesData = responseData?.data || responseData;
+          setSubcategories(Array.isArray(subcategoriesData) ? subcategoriesData : []);
+        }
       } else {
-        fetchSubcategories(page);
+        if (subcategories.length === 1 && page > 1) {
+          setPage(page - 1);
+          fetchSubcategories(page - 1);
+        } else {
+          fetchSubcategories(page);
+        }
       }
     } catch {
       toast.error('Delete failed');
@@ -451,17 +683,6 @@ export default function SubcategoriesPage() {
     setGoToPageInput('');
     fetchSubcategories(p);
   };
-  const Stat = ({ label, value }: { label: string; value: string | number }) => (
-    <div className="rounded-2xl border bg-white shadow-sm p-4 min-w-[140px]">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="text-xl font-semibold text-gray-800">{value}</p>
-    </div>
-  );
-
-  const tooLong = (s?: string) => (s ? s.length > 120 : false);
-
-  // Sidebar collapsed state
-  // (Removed duplicate declaration)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
@@ -480,8 +701,12 @@ export default function SubcategoriesPage() {
                     </svg>
                   </div>
                   <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Subcategories</h1>
-                    <p className="text-slate-600 font-medium">Create, edit and manage product subcategories with SEO optimization</p>
+                    <h1 className="text-3xl font-bold text-slate-900">
+                      {getCurrentLevel() === 'productCategory' ? 'Product Categories' :
+                       getCurrentLevel() === 'subcategory' ? 'Product Categories' :
+                       getCurrentLevel() === 'category' ? 'Subcategories' : 'Categories'}
+                    </h1>
+                    <p className="text-slate-600 font-medium">Create, edit and manage your hierarchical data with SEO optimization</p>
                   </div>
                 </div>
               </div>
@@ -524,6 +749,17 @@ export default function SubcategoriesPage() {
             </div>
           </div>
 
+          {/* Hierarchical Filter and Breadcrumb */}
+          <HierarchicalFilterSidebar
+            onFilterChange={handleFilterChange}
+            currentSelection={filterSelection}
+          />
+
+          <HierarchicalBreadcrumb
+            selection={filterSelection}
+            onNavigate={handleBreadcrumbNavigate}
+          />
+
           {/* Enhanced Stats Dashboard */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl border border-blue-200/60 p-6 shadow-lg">
@@ -534,8 +770,11 @@ export default function SubcategoriesPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-blue-700">Total Subcategories</p>
-                  <p className="text-2xl font-bold text-blue-900">{totalItems}</p>
+                  <p className="text-sm font-medium text-blue-700">
+                    {getCurrentLevel() === 'productCategory' ? 'Total Product Categories' :
+                     getCurrentLevel() === 'subcategory' || getCurrentLevel() === 'category' ? 'Total Subcategories' : 'Total Categories'}
+                  </p>
+                  <p className="text-2xl font-bold text-blue-900">{displayItems.length}</p>
                 </div>
               </div>
             </div>
@@ -627,7 +866,10 @@ export default function SubcategoriesPage() {
                 <thead>
                   <tr className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 uppercase tracking-wide">Image</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 uppercase tracking-wide">Subcategory</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 uppercase tracking-wide">
+                      {getCurrentLevel() === 'productCategory' ? 'Product Category' :
+                       getCurrentLevel() === 'subcategory' || getCurrentLevel() === 'category' ? 'Subcategory' : 'Category'}
+                    </th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 uppercase tracking-wide">Meta Title</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 uppercase tracking-wide">Meta Keywords</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900 uppercase tracking-wide">Meta Description</th>
@@ -638,38 +880,41 @@ export default function SubcategoriesPage() {
                   {loading &&
                     Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
 
-                  {!loading && subcategories.length === 0 && (
+                  {!loading && displayItems.length === 0 && (
                     <tr>
                       <td colSpan={isManagerViewOnly ? 5 : 6} className="px-6 py-12 text-center">
                         <div className="text-slate-500">
                           <svg className="mx-auto h-12 w-12 text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14-7H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z" />
                           </svg>
-                          <p className="text-lg font-medium">No subcategories found</p>
-                          <p className="text-sm">Get started by creating your first subcategory.</p>
+                          <p className="text-lg font-medium">No items found</p>
+                          <p className="text-sm">Get started by creating your first item.</p>
                         </div>
                       </td>
                     </tr>
                   )}
 
                   {!loading &&
-                    subcategories.map((s) => (
-                      <tr key={s._id} className="hover:bg-slate-50/80 transition-colors duration-200">
+                    displayItems.map((item) => (
+                      <tr 
+                        key={item._id} 
+                        onClick={() => handleRowClick(item)}
+                        className="hover:bg-slate-50/80 transition-colors duration-200 cursor-pointer">
                         {/* Image */}
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                           <div className="flex-shrink-0">
-                            {s.sub_cat_img_url ? (
-                              <a href={s.sub_cat_img_url} target="_blank" rel="noreferrer">
+                            {getImageUrl(item) ? (
+                              <a href={getImageUrl(item)} target="_blank" rel="noreferrer">
                                 <img 
-                                  src={s.sub_cat_img_url} 
-                                  alt={s.name} 
+                                  src={getImageUrl(item)} 
+                                  alt={getName(item)} 
                                   className="h-12 w-12 rounded-xl object-cover border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-200" 
                                 />
                               </a>
                             ) : (
                               <div className="h-12 w-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
                                 <span className="text-white font-semibold text-lg">
-                                  {s.name.charAt(0).toUpperCase()}
+                                  {getName(item).charAt(0).toUpperCase()}
                                 </span>
                               </div>
                             )}
@@ -678,19 +923,26 @@ export default function SubcategoriesPage() {
 
                         {/* Name */}
                         <td className="px-6 py-4">
-                          <div>
-                            <div className="font-semibold text-slate-900">{s.name}</div>
-                            <div className="text-sm text-slate-500">
-                              {s.mappedChildren?.length || 0} products
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <div className="font-semibold text-slate-900">{getName(item)}</div>
+                              {item.mappedChildren && item.mappedChildren.length > 0 && (
+                                <div className="text-sm text-slate-500 mt-1">
+                                  {item.mappedChildren.length} {getCurrentLevel() === 'all' ? 'subcategories' : 'items'}
+                                </div>
+                              )}
                             </div>
+                            {getCurrentLevel() !== 'productCategory' && (
+                              <FiChevronRight className="w-5 h-5 text-slate-400" />
+                            )}
                           </div>
                         </td>
 
                         {/* Meta Title */}
-                        <td className="px-6 py-4 max-w-xs">
-                          {s.metaTitle ? (
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-h-20 overflow-y-auto">
-                              <p className="text-sm text-blue-900 font-medium break-words">{s.metaTitle}</p>
+                        <td className="px-6 py-4 max-w-xs" onClick={(e) => e.stopPropagation()}>
+                          {item.metaTitle ? (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-h-20 overflow-y-auto hover:bg-blue-100 transition-colors duration-200">
+                              <p className="text-sm text-blue-900 font-medium break-words">{item.metaTitle}</p>
                             </div>
                           ) : (
                             <span className="text-slate-400 italic">No meta title</span>
@@ -698,10 +950,10 @@ export default function SubcategoriesPage() {
                         </td>
 
                         {/* Meta Keywords */}
-                        <td className="px-6 py-4 max-w-xs">
-                          {s.metaKeyword ? (
-                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 max-h-20 overflow-y-auto">
-                              <p className="text-sm text-purple-900 break-words">{s.metaKeyword}</p>
+                        <td className="px-6 py-4 max-w-xs" onClick={(e) => e.stopPropagation()}>
+                          {item.metaKeyword ? (
+                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 max-h-20 overflow-y-auto hover:bg-purple-100 transition-colors duration-200">
+                              <p className="text-sm text-purple-900 break-words">{item.metaKeyword}</p>
                             </div>
                           ) : (
                             <span className="text-slate-400 italic">No meta keywords</span>
@@ -709,10 +961,10 @@ export default function SubcategoriesPage() {
                         </td>
 
                         {/* Meta Description */}
-                        <td className="px-6 py-4 max-w-xs">
-                          {s.metaDescription ? (
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 max-h-20 overflow-y-auto">
-                              <p className="text-sm text-green-900 break-words">{s.metaDescription}</p>
+                        <td className="px-6 py-4 max-w-xs" onClick={(e) => e.stopPropagation()}>
+                          {item.metaDescription ? (
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 max-h-20 overflow-y-auto hover:bg-green-100 transition-colors duration-200">
+                              <p className="text-sm text-green-900 break-words">{item.metaDescription}</p>
                             </div>
                           ) : (
                             <span className="text-slate-400 italic">No meta description</span>
@@ -720,31 +972,32 @@ export default function SubcategoriesPage() {
                         </td>
 
                         {!isManagerViewOnly && (
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-2 flex-wrap">
                               <button
-                                onClick={() => startEdit(s)}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                                onClick={(e) => { e.stopPropagation(); startEdit(item); }}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition-all duration-200 hover:scale-105"
                               >
                                 <TbEdit className="w-4 h-4" />
                                 Edit
                               </button>
                               
-                              {(!s.metaTitle || !s.metaKeyword || !s.metaDescription) && (
+                              {(!item.metaTitle || !item.metaKeyword || !item.metaDescription) && getCurrentLevel() === 'all' && (
                                 <button
-                                  onClick={() => generateMetaForSubcategory(s)}
-                                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                                  onClick={(e) => { e.stopPropagation(); generateMetaForSubcategory(item); }}
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg shadow-sm transition-all duration-200 hover:scale-105"
                                 >
                                   🤖 Meta
                                 </button>
                               )}
                               
                               <button
-                                onClick={() => {
-                                  setDeletingId(s._id);
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeletingId(item._id);
                                   setShowDeleteModal(true);
                                 }}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg shadow-sm transition-colors duration-200"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg shadow-sm transition-all duration-200 hover:scale-105"
                               >
                                 <RiDeleteBin6Line className="w-4 h-4" />
                                 Delete
@@ -1138,18 +1391,6 @@ const Input = ({ label, value, onChange, required = false }: { label: string; va
 );
 
 // Enhanced Textarea component
-const Textarea = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
-  <div className="space-y-2">
-    <label className="block text-sm font-medium text-slate-700">{label}</label>
-    <textarea
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm resize-none transition-all duration-200 hover:shadow-md"
-      rows={4}
-    />
-  </div>
-);
-
 // Enhanced Skeleton Row
 const SkeletonRow = () => (
   <tr className="animate-pulse border-t">

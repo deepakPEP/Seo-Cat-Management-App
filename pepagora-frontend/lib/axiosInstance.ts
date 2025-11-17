@@ -2,7 +2,7 @@
 // import axios from 'axios';
 
 // const axiosInstance = axios.create({
-//   baseURL: 'http://localhost:4000',
+//   baseURL: 'http://localhost:8000',
 //   withCredentials: true,
 // });
 
@@ -19,7 +19,7 @@
 import axios from 'axios';
 
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:4000',
+  baseURL: 'http://localhost:8000',
   withCredentials: true, // required for sending the refreshToken cookie
 });
 
@@ -47,7 +47,7 @@ axiosInstance.interceptors.response.use(
       try {
         // Call refresh endpoint (cookies will be sent automatically)
         const res = await axios.post(
-          'http://localhost:4000/auth/refresh',
+          'http://localhost:8000/auth/refresh',
           {},
           { withCredentials: true }
         );

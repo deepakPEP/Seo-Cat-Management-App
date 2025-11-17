@@ -114,4 +114,18 @@ export class SubcategoryController {
   remove(@Param('id') id: string) {
     return this.subcategoryService.remove(id);
   }
+
+  // Hierarchical endpoint - Get product categories by subcategory ID
+  @Get(':id/productcategories')
+  @HttpCode(HttpStatus.OK)
+  async getProductCategories(@Param('id') subcategoryId: string) {
+    const result = await this.subcategoryService.getProductCategoriesBySubcategory(subcategoryId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Product categories fetched successfully',
+      data: result.productCategories,
+      subcategory: result.subcategory,
+      category: result.category,
+    };
+  }
 }

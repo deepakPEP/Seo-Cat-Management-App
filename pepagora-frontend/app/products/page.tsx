@@ -1,56 +1,84 @@
 'use client';
 export const dynamic = "force-dynamic";
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { getPaginationRange } from '@/components/GetPage';
 import axiosInstance from '../../lib/axiosInstance';
 import { jwtDecode } from 'jwt-decode';
 import { toast } from 'react-toastify';
 import RichTextEditor from '@/components/RichTextEditor';
-import { MdImageNotSupported } from 'react-icons/md';
 import { TbEdit } from 'react-icons/tb';
 import { RiDeleteBin6Line } from 'react-icons/ri';
 import { LuPlus } from 'react-icons/lu';
 import { AnimatePresence } from 'framer-motion';
-import { useSearchParams } from 'next/navigation';
-import FilterSidebar from '@/components/FilterSideBar';
-import Loader from "@/components/Loader";
-
-type ProductCategory = {
-  _id: string;
-  name: string;
-  metaTitle?: string;
-  metaKeyword?: string;
-  metaDescription?: string;
-  imageUrl?: string;
-  description?: string;
-  mappedParent?: {         // subcategory
-    _id: string;
-    name: string;
-    mappedParent?: {      // category
-      _id: string;
-      name: string;
-    };
-  };
-
-};
+import HierarchicalFilterSidebar from '@/components/HierarchicalFilterSidebar';
+import HierarchicalBreadcrumb from '@/components/HierarchicalBreadcrumb';
+import { FiChevronRight } from 'react-icons/fi';
 
 type Category = {
   _id: string;
-  name: string;
+  name?: string;
+  main_cat_name?: string;
   metaTitle?: string;
   metaKeyword?: string;
   metaDescription?: string;
   imageUrl?: string;
+  main_cat_image?: string;
+  mappedChildren?: string[];
   description?: string;
-}
+};
+
 type Subcategory = {
   _id: string;
-  name: string;
+  name?: string;
+  sub_cat_name?: string;
+  metaTitle?: string;
+  metaKeyword?: string;
+  metaDescription?: string;
   mappedParent?: string;
-
+  sub_cat_img_url?: string;
+  imageUrl?: string;
+  image?: string;
+  mappedChildren?: string[];
+  description?: string;
 };
+
+type ProductCategory = {
+  _id: string;
+  name?: string;
+  metaTitle?: string;
+  metaKeyword?: string;
+  metaDescription?: string;
+  imageUrl?: string;
+  mappedParent?: string;
+  description?: string;
+};
+
+type FilterSelection = {
+  category: Category | null;
+  subcategory: Subcategory | null;
+  productCategory: ProductCategory | null;
+};
+
+// Helper to extract JSON from AI response (handles markdown code blocks)
+function extractJSON(text: string): any {
+  try {
+    // First try direct parse
+    return JSON.parse(text);
+  } catch {
+    // Try to extract from markdown code blocks
+    const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[1]);
+    }
+    // Try to find JSON object directly
+    const jsonObjMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonObjMatch) {
+      return JSON.parse(jsonObjMatch[0]);
+    }
+    throw new Error('No valid JSON found');
+  }
+}
 
 type TokenPayload = {
   sub: string;
@@ -74,25 +102,27 @@ function SkeletonRow() {
 }
 
 export default function ProductsPage() {
-  const router = useRouter();
+  // Sidebar collapse state
+  const [collapsed, setCollapsed] = useState(false);
+
+  // ---- Hierarchical Filter State ----
+  const [filterSelection, setFilterSelection] = useState<FilterSelection>({
+    category: null,
+    subcategory: null,
+    productCategory: null,
+  });
+  const [displayItems, setDisplayItems] = useState<any[]>([]);
 
   // data
-  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
-  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // filter selections
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [filteredSubcategories, setFilteredSubcategories] = useState<Subcategory[]>([]);
-  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
-
 
   // paging & search
   const [page, setPage] = useState<number>(1);
   const [limit] = useState<number>(10);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const [totalItems, setTotalItems] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [goToPageInput, setGoToPageInput] = useState<string>('');
 
@@ -118,6 +148,53 @@ export default function ProductsPage() {
 
   // DeepSeek AI loading state
   const [aiLoading, setAiLoading] = useState(false);
+
+  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+
+  // ---- Helper Functions ----
+  const getCurrentLevel = () => {
+    if (filterSelection.productCategory) return 'productCategory';
+    if (filterSelection.subcategory) return 'subcategory';
+    if (filterSelection.category) return 'category';
+    return 'all';
+  };
+
+  const getName = (item: any) => {
+    return item?.name || item?.main_cat_name || item?.sub_cat_name || 'Unnamed';
+  };
+
+  const getImageUrl = (item: any) => {
+    return item?.imageUrl || item?.image || item?.main_cat_image || item?.sub_cat_img_url || '';
+  };
+
+  const handleFilterChange = (selection: FilterSelection) => {
+    setFilterSelection(selection);
+  };
+
+  const handleBreadcrumbNavigate = (level: 'home' | 'category' | 'subcategory') => {
+    if (level === 'home') {
+      setFilterSelection({ category: null, subcategory: null, productCategory: null });
+    } else if (level === 'category') {
+      setFilterSelection({ ...filterSelection, subcategory: null, productCategory: null });
+    } else if (level === 'subcategory') {
+      setFilterSelection({ ...filterSelection, productCategory: null });
+    }
+  };
+
+  const handleRowClick = async (item: any) => {
+    const currentLevel = getCurrentLevel();
+    
+    if (currentLevel === 'all') {
+      // Clicking a category - fetch its subcategories
+      setFilterSelection({ category: item, subcategory: null, productCategory: null });
+    } else if (currentLevel === 'category') {
+      // Clicking a subcategory - fetch its product categories
+      setFilterSelection({ ...filterSelection, subcategory: item, productCategory: null });
+    } else if (currentLevel === 'subcategory') {
+      // Clicking a product category - just select it
+      setFilterSelection({ ...filterSelection, productCategory: item });
+    }
+  };
 
   // Helper to download response.txt
   function downloadResponseTxt(content: string) {
@@ -163,19 +240,19 @@ export default function ProductsPage() {
       if (aiText) {
         downloadResponseTxt(aiText);
         try {
-          const json = JSON.parse(aiText);
+          const json = extractJSON(aiText);
           setFormMetaTitle(json.by_lang?.['<lang>']?.meta?.title || '');
           setFormMetaKeyword((json.keywords?.head || []).join(', '));
           setFormMetaDescription(json.by_lang?.['<lang>']?.meta?.description || '');
           setFormDescription(json.by_lang?.['<lang>']?.intro_html || '');
           toast.success('Fields rewritten with AI!');
-        } catch (e) {
+        } catch {
           toast.error('AI response is not valid JSON.');
         }
       } else {
         toast.error('AI did not return a result');
       }
-    } catch (err) {
+    } catch {
       toast.error('AI rewrite failed');
     } finally {
       setAiLoading(false);
@@ -183,35 +260,74 @@ export default function ProductsPage() {
   }
 
 
-  // const searchParams = useSearchParams();
-    // const [token, setToken] = useState<string | null>(null);
-    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
 
-
-
-  // const categoryId = searchParams.get("category");
-  // const subcategoryId = searchParams.get("subcategory");
-  const [categoriesLoading, setCategoriesLoading] = useState(false);
-  const [subcategoriesLoading, setSubcategoriesLoading] = useState(false);
-  const [productsLoading, setProductsLoading] = useState(false);
-
-
-
-  // when categories change, update filtered subcategories
+  // Fetch subcategories when category is selected (hierarchical filter)
   useEffect(() => {
-    if (selectedCategories.length === 0) {
-      setFilteredSubcategories(subcategories);
-    } else {
-      setFilteredSubcategories(
-        subcategories.filter(s => selectedCategories.includes(s.mappedParent || ''))
-      );
-    }
+    const fetchSubcategoriesByCategory = async () => {
+      if (!filterSelection.category) {
+        setSubcategories([]);
+        return;
+      }
+      try {
+        const res = await axiosInstance.get(`/categories/${filterSelection.category._id}/subcategories`);
+        const responseData = res.data?.data || res.data;
+        const subcategoriesData = responseData?.data || responseData;
+        setSubcategories(Array.isArray(subcategoriesData) ? subcategoriesData : []);
+      } catch {
+        console.error('Error fetching subcategories');
+        setSubcategories([]);
+      }
+    };
+    fetchSubcategoriesByCategory();
+  }, [filterSelection.category]);
 
-    // clear selected subcategories if not in filtered
-    setSelectedSubcategories(prev => prev.filter(sid =>
-      filteredSubcategories.some(s => s._id === sid)
-    ));
-  }, [selectedCategories, subcategories]);
+  // Fetch product categories when subcategory is selected (hierarchical filter)
+  useEffect(() => {
+    const fetchProductCategoriesBySubcategory = async () => {
+      if (!filterSelection.subcategory) {
+        setProductCategories([]);
+        return;
+      }
+      try {
+        const res = await axiosInstance.get(`/subcategories/${filterSelection.subcategory._id}/productcategories`);
+        let data = [];
+        if (res.data?.data?.data) {
+          data = res.data.data.data;
+        } else if (Array.isArray(res.data?.data)) {
+          data = res.data.data;
+        } else if (Array.isArray(res.data)) {
+          data = res.data;
+        }
+        setProductCategories(Array.isArray(data) ? data : []);
+      } catch {
+        console.error('Error fetching product categories');
+        setProductCategories([]);
+      }
+    };
+    fetchProductCategoriesBySubcategory();
+  }, [filterSelection.subcategory]);
+
+  // Update displayItems based on filter selection
+  useEffect(() => {
+    const currentLevel = () => {
+      if (filterSelection.productCategory) return 'productCategory';
+      if (filterSelection.subcategory) return 'subcategory';
+      if (filterSelection.category) return 'category';
+      return 'all';
+    };
+    
+    const level = currentLevel();
+    
+    if (level === 'productCategory') {
+      setDisplayItems(productCategories);
+    } else if (level === 'subcategory') {
+      setDisplayItems(productCategories);
+    } else if (level === 'category') {
+      setDisplayItems(subcategories);
+    } else {
+      setDisplayItems(categories);
+    }
+  }, [filterSelection, categories, subcategories, productCategories]);
 
   useEffect(() => {
   if (typeof window !== "undefined") {
@@ -228,19 +344,16 @@ export default function ProductsPage() {
 }, []);
 
 
-  // fetch subcategories for dropdown
+  // fetch categories for dropdown
   useEffect(()=>{
     const fetchCategories = async () => {
     try {
-      setCategoriesLoading(true);   
-      const res = await axiosInstance.get('/categories', { params: { limit: 1000 } }); // fetch list for dropdown
+      const res = await axiosInstance.get('/categories', { params: { limit: 1000 } });
       const items = Array.isArray(res.data.data.data) ? res.data.data.data : [];
       setCategories(items);
     } catch (err) {
       console.error('fetchCategories', err);
       setCategories([]);
-    } finally {
-      setCategoriesLoading(false);
     }
   }; fetchCategories();
 }, []);
@@ -265,41 +378,25 @@ useEffect(()=>{
   const fetchProducts = async (pageToFetch = page) => {
     setLoading(true);
     try {
-      setProductsLoading(true);
-      let endpoint = "/productcategories"; // default
+      const endpoint = "/productcategories";
       const params: any = {
         page: pageToFetch,
         limit,
         search: searchQuery || undefined,
       };
 
-      if (selectedCategories.length > 0 || selectedSubcategories.length > 0) {
-        endpoint = "/productcategories/filter"; // use filter route
-        // if (selectedCategories.length > 0) {
-        //   params.categories = selectedCategories.join(",");
-        // }
-        if (selectedSubcategories.length > 0) {
-          params.subcategories = selectedSubcategories.join(",");
-        }
-      }
-
       const res = await axiosInstance.get(endpoint, { params });
 
       const items = Array.isArray(res.data.data.data) ? res.data.data.data : [];
       const pagination = res.data.data.pagination || {};
 
-      console.log("vgbhjn", res.data.data.data);
-
       setProductCategories(items);
       setTotalPages(pagination.totalPages || 1);
-      setTotalItems(pagination.totalItems || items.length || 0);
     } catch (err) {
       console.error("Error fetching product categories:", err);
       setProductCategories([]);
     } finally {
       setLoading(false);
-      setProductsLoading(false);
-
     }
   };
 
@@ -348,16 +445,17 @@ useEffect(()=>{
   };
 
   // Generate meta data for a specific product
-  const generateMetaForProduct = async (productCategory: ProductCategory) => {
+  const generateMetaForProduct = async (item: any) => {
     try {
-      const categoryName = productCategory.mappedParent?.mappedParent?.name || '';
-      const subcategoryName = productCategory.mappedParent?.name || '';
+      const categoryName = filterSelection.category?.name || filterSelection.category?.main_cat_name || '';
+      const subcategoryName = filterSelection.subcategory?.name || filterSelection.subcategory?.sub_cat_name || '';
+      const itemName = getName(item);
       
       const prompt = `Generate SEO meta data for this product:
-      Product Name: ${productCategory.name}
+      Product Name: ${itemName}
       Category: ${categoryName}
       Subcategory: ${subcategoryName}
-      ${productCategory.description ? `Description: ${productCategory.description}` : ''}
+      ${item.description ? `Description: ${item.description}` : ''}
       
       Please provide:
       1. Meta Title (max 60 characters)
@@ -406,8 +504,7 @@ useEffect(()=>{
       }
 
       const updatedData: any = { 
-        name: productCategory.name,
-        mappedParent: productCategory.mappedParent?._id
+        name: itemName
       };
       
       if (metaTitleMatch) updatedData.metaTitle = metaTitleMatch[1].trim();
@@ -416,14 +513,22 @@ useEffect(()=>{
 
       // Update the product with generated meta data
       console.log('Updating product with data:', updatedData);
-      const updateResponse = await axiosInstance.patch(`/productcategories/${productCategory._id}`, updatedData);
+      const updateResponse = await axiosInstance.patch(`/productcategories/${item._id}`, updatedData);
       
       if (updateResponse.status !== 200) {
         throw new Error(`Failed to update product: ${updateResponse.status}`);
       }
-
-      toast.success(`Meta data generated for ${productCategory.name}!`);
-      fetchProducts(page); // Refresh the data
+      
+      toast.success(`Meta data generated for ${itemName}!`);
+      
+      // Refresh the appropriate list
+      if (filterSelection.subcategory) {
+        const res = await axiosInstance.get(`/subcategories/${filterSelection.subcategory._id}/productcategories`);
+        const data = res.data?.data?.data || res.data?.data || res.data;
+        setProductCategories(Array.isArray(data) ? data : []);
+      } else {
+        fetchProducts(page);
+      }
       
     } catch (error: any) {
       let errorMessage = 'Unknown error occurred';
@@ -491,45 +596,106 @@ useEffect(()=>{
     }
   };
 
-  // start edit
-  const startEdit = (p: ProductCategory) => {
-    setEditingId(p._id);
-    setFormName(p.name || '');
+  // start edit - Dynamic for all levels
+  const startEdit = (item: any) => {
+    setEditingId(item._id);
+    setFormName(getName(item));
     setFormMappedParent(
-      typeof p.mappedParent === 'string'
-        ? p.mappedParent
-        : p.mappedParent?._id || null
+      typeof item.mappedParent === 'string'
+        ? item.mappedParent
+        : item.mappedParent?._id || null
     );
-    setFormMetaTitle(p.metaTitle || '');
-    setFormMetaKeyword(p.metaKeyword || '');
-    setFormMetaDescription(p.metaDescription || '');
-    setFormImageUrl(p.imageUrl || '');
-    setFormDescription(p.description || '');
+    setFormMetaTitle(item.metaTitle || '');
+    setFormMetaKeyword(item.metaKeyword || '');
+    setFormMetaDescription(item.metaDescription || '');
+    setFormImageUrl(getImageUrl(item));
+    setFormDescription(item.description || '');
     setShowEditModal(true);
   };
 
-  // save edit
+  // save edit - Dynamic for all levels (matching categories page logic)
   const saveEdit = async () => {
     if (!editingId) return;
     try {
       setLoading(true);
+      const currentLevel = getCurrentLevel();
+      let endpoint = '';
+      let payload: any = {};
+      let httpMethod: 'put' | 'patch' = 'put';
+      let successMsg = '';
 
-      const payload = {
-        name: formName, // Always include name for update
-        mappedParent: formMappedParent || undefined,
-        imageUrl: formImageUrl || undefined,
-        metaTitle: formMetaTitle || undefined,
-        metaKeyword: formMetaKeyword || undefined,
-        metaDescription: formMetaDescription || undefined,
-        description: formDescription || undefined,
-      };
+      if (currentLevel === 'productCategory') {
+        // Editing a product category
+        endpoint = `/productcategories/${editingId}`;
+        httpMethod = 'patch';
+        payload = {
+          name: formName,
+          metaTitle: formMetaTitle,
+          metaDescription: formMetaDescription,
+          metaKeyword: formMetaKeyword,
+          description: formDescription,
+          imageUrl: formImageUrl || '',
+        };
+        successMsg = `Product category ${formName} updated successfully!`;
+      } else if (currentLevel === 'subcategory') {
+        // Editing a subcategory
+        endpoint = `/subcategories/${editingId}`;
+        payload = {
+          name: formName,
+          metaTitle: formMetaTitle,
+          metaDescription: formMetaDescription,
+          metaKeyword: formMetaKeyword,
+          description: formDescription,
+          sub_cat_img_url: formImageUrl || '',
+          mappedParent: formMappedParent,
+        };
+        successMsg = `Subcategory ${formName} updated successfully!`;
+      } else {
+        // Editing a category
+        endpoint = `/categories/${editingId}`;
+        payload = {
+          main_cat_name: formName,
+          metaTitle: formMetaTitle,
+          metaDescription: formMetaDescription,
+          metaKeyword: formMetaKeyword,
+          description: formDescription,
+          imageUrl: formImageUrl || '',
+        };
+        successMsg = `Category ${formName} updated successfully!`;
+      }
 
-      await axiosInstance.patch(`/productcategories/${editingId}`, payload);
-
-      toast.success("Product updated successfully!");
-      setShowEditModal(false);
-      setEditingId(null);
-      fetchProducts(page);
+      const res = httpMethod === 'patch' 
+        ? await axiosInstance.patch(endpoint, payload)
+        : await axiosInstance.put(endpoint, payload);
+        
+      if (res.status === 200 || res.status === 201) {
+        toast.success(successMsg);
+        setShowEditModal(false);
+        setEditingId(null);
+        
+        // Update local state immediately to reflect changes in UI
+        if (currentLevel === 'productCategory') {
+          setProductCategories(prev => prev.map(item => 
+            item._id === editingId 
+              ? { ...item, ...payload, _id: item._id }
+              : item
+          ));
+        } else if (currentLevel === 'subcategory') {
+          setSubcategories(prev => prev.map(item => 
+            item._id === editingId 
+              ? { ...item, ...payload, _id: item._id }
+              : item
+          ));
+        } else {
+          setCategories(prev => prev.map(item => 
+            item._id === editingId 
+              ? { ...item, ...payload, _id: item._id }
+              : item
+          ));
+        }
+      } else {
+        toast.error('Failed to update');
+      }
     } catch (err: any) {
       console.error("Update failed:", err.response?.data || err.message);
       toast.error(err.response?.data?.message || "Update failed");
@@ -539,24 +705,59 @@ useEffect(()=>{
   };
 
 
-  // delete
+  // delete - Dynamic for all levels (matching categories page logic)
   const handleDelete = async () => {
     if (!deletingId) return;
     try {
       setLoading(true);
-      await axiosInstance.delete(`/productcategories/${deletingId}`);
-      toast.success('Deleted');
+      const currentLevel = getCurrentLevel();
+      let endpoint = '';
+      let successMsg = '';
+
+      if (currentLevel === 'productCategory' || (filterSelection.subcategory && !filterSelection.productCategory)) {
+        endpoint = `/productcategories/${deletingId}`;
+        successMsg = 'Product category deleted successfully!';
+      } else if (currentLevel === 'subcategory' || (filterSelection.category && !filterSelection.subcategory)) {
+        endpoint = `/subcategories/${deletingId}`;
+        successMsg = 'Subcategory deleted successfully!';
+      } else {
+        endpoint = `/categories/${deletingId}`;
+        successMsg = 'Category deleted successfully!';
+      }
+
+      const res = await axiosInstance.delete(endpoint);
+      if (res.status === 200) {
+        toast.success(successMsg);
+      }
+      
       setShowDeleteModal(false);
       setDeletingId(null);
-      // if last item on page was deleted, move back page
-      if (productCategories.length === 1 && page > 1) {
-        setPage(page - 1);
-        fetchProducts(page - 1);
+      
+      // Refresh the appropriate list (matching delete type detection logic)
+      if (currentLevel === 'productCategory' || (filterSelection.subcategory && !filterSelection.productCategory)) {
+        // Refreshing product categories
+        if (filterSelection.subcategory) {
+          const res = await axiosInstance.get(`/subcategories/${filterSelection.subcategory._id}/productcategories`);
+          const data = res.data?.data?.data || res.data?.data || res.data;
+          setProductCategories(Array.isArray(data) ? data : []);
+        }
+      } else if (currentLevel === 'subcategory' || (filterSelection.category && !filterSelection.subcategory)) {
+        // Refreshing subcategories
+        if (filterSelection.category) {
+          const res = await axiosInstance.get(`/categories/${filterSelection.category._id}/subcategories`);
+          const responseData = res.data?.data || res.data;
+          const subcategoriesData = responseData?.data || responseData;
+          setSubcategories(Array.isArray(subcategoriesData) ? subcategoriesData : []);
+        }
       } else {
-        fetchProducts(page);
+        // Refreshing categories
+        const res = await axiosInstance.get('/categories', { params: { limit: 1000 } });
+        const items = Array.isArray(res.data.data.data) ? res.data.data.data : [];
+        setCategories(items);
       }
-    } catch {
+    } catch (err) {
       toast.error('Delete failed');
+      console.error('Delete failed:', err);
     } finally {
       setLoading(false);
     }
@@ -579,10 +780,6 @@ useEffect(()=>{
     fetchProducts(p);
   };
 
-  const tooLong = (s?: string) => (s ? s.length > 120 : false);
-
-  const [collapsed, setCollapsed] = useState(false);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
       <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
@@ -600,8 +797,12 @@ useEffect(()=>{
                     </svg>
                   </div>
                   <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Product Categories</h1>
-                    <p className="text-slate-600 font-medium">Manage your product categories with advanced features</p>
+                    <h1 className="text-3xl font-bold text-slate-900">
+                      {getCurrentLevel() === 'productCategory' ? 'Product Categories' :
+                       getCurrentLevel() === 'subcategory' ? 'Product Categories' :
+                       getCurrentLevel() === 'category' ? 'Subcategories' : 'Categories'}
+                    </h1>
+                    <p className="text-slate-600 font-medium">Manage your hierarchical data with advanced features</p>
                   </div>
                 </div>
               </div>
@@ -635,48 +836,16 @@ useEffect(()=>{
             </div>
           </div>
 
-          {/* Search and Filters */}
-          <div className="bg-white rounded-2xl shadow-lg border border-slate-200/60 p-6">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex-1 max-w-md">
-                <div className="relative">
-                  <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Search product categories..."
-                    value={searchQuery}
-                    onChange={(e) => onSearchChange(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all duration-200"
-                  />
-                </div>
-              </div>
+          {/* Hierarchical Filter and Breadcrumb */}
+          <HierarchicalFilterSidebar
+            onFilterChange={handleFilterChange}
+            currentSelection={filterSelection}
+          />
 
-              <FilterSidebar
-                categories={categories.map(cat => ({
-                  _id: cat._id,
-                  main_cat_name: cat.name,
-                  subcategories: subcategories
-                    .filter(sub => sub.mappedParent === cat._id)
-                    .map(sub => ({
-                      _id: sub._id,
-                      name: sub.name,
-                    })),
-                }))}
-                selectedCategories={selectedCategories}
-                selectedSubcategories={selectedSubcategories}
-                setSelectedCategories={setSelectedCategories}
-                setSelectedSubcategories={setSelectedSubcategories}
-                onApply={() => fetchProducts(1)} // apply filters
-                onReset={() => {
-                  setSelectedCategories([]);
-                  setSelectedSubcategories([]);
-                  fetchProducts(1);
-                }}
-              />
-            </div>
-          </div>
+          <HierarchicalBreadcrumb
+            selection={filterSelection}
+            onNavigate={handleBreadcrumbNavigate}
+          />
 
           {/* Enhanced Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -688,8 +857,11 @@ useEffect(()=>{
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-blue-700">Total Product Categories</p>
-                  <p className="text-2xl font-bold text-blue-900">{totalItems}</p>
+                  <p className="text-sm font-medium text-blue-700">
+                    {getCurrentLevel() === 'productCategory' ? 'Total Product Categories' :
+                     getCurrentLevel() === 'subcategory' || getCurrentLevel() === 'category' ? 'Total Subcategories' : 'Total Categories'}
+                  </p>
+                  <p className="text-2xl font-bold text-blue-900">{displayItems.length}</p>
                 </div>
               </div>
             </div>
@@ -733,7 +905,10 @@ useEffect(()=>{
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">S. NO</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Image</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Product Category</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      {getCurrentLevel() === 'productCategory' ? 'Product Category' :
+                       getCurrentLevel() === 'subcategory' || getCurrentLevel() === 'category' ? 'Subcategory' : 'Category'}
+                    </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Meta Title</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Meta Keywords</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Meta Description</th>
@@ -744,54 +919,62 @@ useEffect(()=>{
                 <tbody className="divide-y divide-slate-200">
                   {loading && Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
 
-                  {!loading && productCategories.length === 0 && (
+                  {!loading && displayItems.length === 0 && (
                     <tr>
                       <td colSpan={isManagerViewOnly ? 6 : 7} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <svg className="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                           </svg>
-                          <p className="text-slate-500 font-medium">No product categories found</p>
+                          <p className="text-slate-500 font-medium">No items found</p>
                           <p className="text-slate-400 text-sm">Try adjusting your search or filters</p>
                         </div>
                       </td>
                     </tr>
                   )}
 
-                  {!loading && productCategories.map((prod, idx) => (
-                    <tr key={prod._id} className="hover:bg-slate-50/50 transition-colors duration-200">
-                      <td className="px-6 py-4 text-sm font-medium text-slate-900">{(page - 1) * limit + idx + 1}</td>
-                      <td className="px-6 py-4">
-                        {prod.imageUrl ? (
-                          <a href={prod.imageUrl} target="_blank" rel="noreferrer" className="block">
+                  {!loading && displayItems.map((item, idx) => (
+                    <tr 
+                      key={item._id} 
+                      onClick={() => handleRowClick(item)}
+                      className="hover:bg-slate-50/50 transition-colors duration-200 cursor-pointer">
+                      <td className="px-6 py-4 text-sm font-medium text-slate-900" onClick={(e) => e.stopPropagation()}>{(page - 1) * limit + idx + 1}</td>
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        {getImageUrl(item) ? (
+                          <a href={getImageUrl(item)} target="_blank" rel="noreferrer" className="block">
                             <img 
-                              src={prod.imageUrl} 
-                              alt={prod.name} 
+                              src={getImageUrl(item)} 
+                              alt={getName(item)} 
                               className="h-12 w-12 rounded-xl object-cover shadow-md border border-slate-200 hover:shadow-lg transition-all duration-200" 
                             />
                           </a>
                         ) : (
                           <div className="h-12 w-12 rounded-xl bg-slate-100 flex items-center justify-center">
-                            <MdImageNotSupported className="h-6 w-6 text-slate-400" />
+                            <span className="text-slate-600 font-semibold text-lg">{getName(item).charAt(0).toUpperCase()}</span>
                           </div>
                         )}
                       </td>
                    
                       <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <p className="font-semibold text-slate-900">{prod.name}</p>
-                          {prod.mappedParent && (
-                            <p className="text-xs text-slate-500">
-                              {prod.mappedParent.mappedParent?.name} → {prod.mappedParent.name}
-                            </p>
+                        <div className="flex items-center gap-3">
+                          <div className="space-y-1">
+                            <p className="font-semibold text-slate-900">{getName(item)}</p>
+                            {item.mappedChildren && item.mappedChildren.length > 0 && (
+                              <div className="text-sm text-slate-500 mt-1">
+                                {item.mappedChildren.length} {getCurrentLevel() === 'all' ? 'subcategories' : 'items'}
+                              </div>
+                            )}
+                          </div>
+                          {getCurrentLevel() !== 'productCategory' && (
+                            <FiChevronRight className="w-5 h-5 text-slate-400" />
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        {prod.metaTitle ? (
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        {item.metaTitle ? (
                           <div className="max-w-xs">
                             <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-3 text-xs text-blue-900 break-words meta-scrollable meta-title-scrollable">
-                              <span className="font-medium">{prod.metaTitle}</span>
+                              <span className="font-medium">{item.metaTitle}</span>
                             </div>
                           </div>
                         ) : (
@@ -800,11 +983,11 @@ useEffect(()=>{
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
-                        {prod.metaKeyword ? (
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        {item.metaKeyword ? (
                           <div className="max-w-xs">
                             <div className="bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-3 text-xs text-purple-900 break-words meta-scrollable meta-keywords-scrollable">
-                              <span className="font-medium">{prod.metaKeyword}</span>
+                              <span className="font-medium">{item.metaKeyword}</span>
                             </div>
                           </div>
                         ) : (
@@ -813,11 +996,11 @@ useEffect(()=>{
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
-                        {prod.metaDescription ? (
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        {item.metaDescription ? (
                           <div className="max-w-xs">
                             <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-lg p-3 text-xs text-green-900 break-words meta-scrollable meta-description-scrollable">
-                              <span className="font-medium">{prod.metaDescription}</span>
+                              <span className="font-medium">{item.metaDescription}</span>
                             </div>
                           </div>
                         ) : (
@@ -827,19 +1010,19 @@ useEffect(()=>{
                         )}
                       </td>
                       {!isManagerViewOnly && (
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-2">
                             <button 
-                              onClick={() => startEdit(prod)} 
-                              className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors duration-200"
+                              onClick={(e) => { e.stopPropagation(); startEdit(item); }} 
+                              className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-all duration-200 hover:scale-105"
                             >
                               <TbEdit className="w-4 h-4" />
                               Edit
                             </button>
-                            {(!prod.metaTitle || !prod.metaKeyword || !prod.metaDescription) && (
+                            {(!item.metaTitle || !item.metaKeyword || !item.metaDescription) && getCurrentLevel() === 'all' && (
                               <button
-                                onClick={() => generateMetaForProduct(prod)}
-                                className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors duration-200"
+                                onClick={(e) => { e.stopPropagation(); generateMetaForProduct(item); }}
+                                className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-all duration-200 hover:scale-105"
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -848,8 +1031,8 @@ useEffect(()=>{
                               </button>
                             )}
                             <button 
-                              onClick={() => { setDeletingId(prod._id); setShowDeleteModal(true); }} 
-                              className="inline-flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors duration-200"
+                              onClick={(e) => { e.stopPropagation(); setDeletingId(item._id); setShowDeleteModal(true); }} 
+                              className="inline-flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all duration-200 hover:scale-105"
                             >
                               <RiDeleteBin6Line className="w-4 h-4" />
                               Delete
