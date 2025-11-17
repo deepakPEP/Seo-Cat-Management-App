@@ -1,6 +1,8 @@
 import { config } from 'dotenv';
 config(); // Load .env values
 
+// msanthoshhh
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -21,7 +23,7 @@ async function bootstrap() {
   app.use(cookieParser());
   // ✅ Enable CORS for frontend
   app.enableCors({
-    origin: process.env.FRONTEND_URL,
+    origin: process.env.FRONTEND_URL || 'http://localhost:7000',
     credentials: true,
   });
   app.use(helmet()); // ✅ Security headers with Helmet
@@ -55,8 +57,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  const port = process.env.PORT || 4000;
+  const port = process.env.PORT || 8000;
   await app.listen(port);
   console.log(`🚀 Server running on http://localhost:${port}`);
 }
-bootstrap();
+void bootstrap();

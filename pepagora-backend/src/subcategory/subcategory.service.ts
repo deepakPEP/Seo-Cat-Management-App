@@ -4,16 +4,81 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { InjectModel, InjectConnection } from '@nestjs/mongoose';
+import { Model, Connection } from 'mongoose';
+import { Db, ObjectId } from 'mongodb';
 import { Subcategory } from './subcategory.schema';
 import { CreateSubcategoryDto } from './dto/create-subcategory.dto';
 
+type CategoryDocument = {
+  _id: ObjectId;
+  name?: string;
+  main_cat_name?: string;
+  mappedChildren?: (string | ObjectId)[];
+};
+
+type SubcategoryDocument = {
+  _id: ObjectId;
+  name?: string;
+  sub_cat_name?: string;
+  mappedChildren?: (string | ObjectId)[];
+};
+
+type ProductCategoryDocument = {
+  _id: ObjectId;
+  name?: string;
+  product_category_name?: string;
+  parentId?: string | ObjectId;
+};
+
 @Injectable()
 export class SubcategoryService {
+  private readonly metaDb: Db;
+
   constructor(
     @InjectModel(Subcategory.name) private subcategoryModel: Model<Subcategory>,
-  ) {}
+    @InjectConnection() private readonly connection: Connection,
+  ) {
+    // Access the native MongoDB client from Mongoose connection (same as marketing service)
+    let client: any;
+    if (typeof (this.connection as any).getClient === 'function') {
+      client = (this.connection as any).getClient();
+    } else if ((this.connection as any).client) {
+      client = (this.connection as any).client;
+    } else if ((this.connection as any).db?.client) {
+      client = (this.connection as any).db.client;
+    } else if ((this.connection as any).db?.db?.client) {
+      client = (this.connection as any).db.db.client;
+    }
+    
+    if (!client) {
+      throw new Error('MongoDB client not available from connection');
+    }
+    
+    this.metaDb = client.db('metaData');
+  }
+
+  private toObjectId(id: string | ObjectId | undefined | null): ObjectId | null {
+    if (!id) return null;
+    if (id instanceof ObjectId) return id;
+    if (!ObjectId.isValid(id)) return null;
+    return new ObjectId(id);
+  }
+
+  private getCategoryName(category: CategoryDocument | null | undefined): string {
+    if (!category) return 'Unnamed Category';
+    return category.name ?? category.main_cat_name ?? 'Unnamed Category';
+  }
+
+  private getSubcategoryName(subcategory: SubcategoryDocument | null | undefined): string {
+    if (!subcategory) return 'Unnamed Subcategory';
+    return subcategory.name ?? subcategory.sub_cat_name ?? 'Unnamed Subcategory';
+  }
+
+  private getProductCategoryName(productCategory: ProductCategoryDocument | null | undefined): string {
+    if (!productCategory) return 'Unnamed Product Category';
+    return productCategory.name ?? productCategory.product_category_name ?? 'Unnamed Product Category';
+  }
 
   async create(dto: CreateSubcategoryDto) {
     const existingSubcategory = await this.subcategoryModel.findOne({
@@ -109,5 +174,53 @@ export class SubcategoryService {
     const subcategory = await this.subcategoryModel.findByIdAndDelete(id);
     if (!subcategory) throw new NotFoundException('Subcategory not found');
     return subcategory;
+  }
+
+  // Get product categories by subcategory ID (hierarchical endpoint - matching marketing service)
+  async getProductCategoriesBySubcategory(subcategoryId: string) {
+    try {
+      const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
+      const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
+      const productCategoriesCollection = this.metaDb.collection<ProductCategoryDocument>('productcategories');
+
+      const subcategoryObjectId = this.toObjectId(subcategoryId);
+      if (!subcategoryObjectId) throw new BadRequestException('Invalid subcategory ID');
+
+      const subcategory = await subcategoriesCollection.findOne({ _id: subcategoryObjectId });
+      if (!subcategory) throw new BadRequestException('Subcategory not found');
+
+      // Use parentId field like marketing service (line 176 of marketing.service.ts)
+      const productCategories = await productCategoriesCollection
+        .find({ parentId: subcategoryObjectId }, { projection: { name: 1 } })
+        .sort({ name: 1 })
+        .toArray();
+
+      // Find the parent category
+      const category = await categoriesCollection.findOne({
+        mappedChildren: { $in: [subcategory._id.toString()] },
+      });
+
+      return {
+        category: category
+          ? {
+              _id: category._id.toString(),
+              name: this.getCategoryName(category),
+            }
+          : null,
+        subcategory: {
+          _id: subcategory._id.toString(),
+          name: this.getSubcategoryName(subcategory),
+        },
+        productCategories: productCategories.map((pc) => ({
+          _id: pc._id.toString(),
+          name: this.getProductCategoryName(pc),
+        })),
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to fetch product categories');
+    }
   }
 }

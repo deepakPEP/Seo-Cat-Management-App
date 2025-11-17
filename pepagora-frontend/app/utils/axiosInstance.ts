@@ -11,7 +11,7 @@ export function setAccessToken(token: string) {
 }
 
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:4000',
+  baseURL: 'http://localhost:8000',
   withCredentials: true,
 });
 
@@ -40,7 +40,7 @@ axiosInstance.interceptors.response.use(
       originalRequest._retry = true;
       try {
         const res = await axios.post(
-          'http://localhost:4000/auth/refresh',
+          'http://localhost:8000/auth/refresh',
           {},
           { withCredentials: true }
         );

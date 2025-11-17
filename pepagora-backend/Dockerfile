@@ -17,7 +17,7 @@ COPY . .
 RUN npm run build
 
 # Expose backend port
-EXPOSE 4000
+EXPOSE 8000
 
 # Start NestJS in production mode
 CMD ["npm", "run", "start:dev"]

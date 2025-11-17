@@ -104,4 +104,17 @@ export class CategoryController {
       message: 'Category deleted successfully',
     };
   }
+
+  // Hierarchical endpoint - Get subcategories by category ID
+  @Get(':id/subcategories')
+  @HttpCode(HttpStatus.OK)
+  async getSubcategories(@Param('id') categoryId: string) {
+    const result = await this.categoryService.getSubcategoriesByCategory(categoryId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Subcategories fetched successfully',
+      data: result.subcategories,
+      category: result.category,
+    };
+  }
 }
