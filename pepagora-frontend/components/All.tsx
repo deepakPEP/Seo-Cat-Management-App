@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { buildApiUrl } from '@/lib/env';
 
 export default function CategoryHeaderPage() {
   const [categories, setCategories] = useState([]);
@@ -19,7 +20,7 @@ export default function CategoryHeaderPage() {
   // Fetch categories on load
   useEffect(() => {
     axios
-      .get('http://localhost:8000/categories', {
+      .get(buildApiUrl('/categories'), {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => setCategories(res.data))
@@ -38,7 +39,7 @@ export default function CategoryHeaderPage() {
     }
 
     axios
-      .get(`http://localhost:8000/categories/${selectedCategory}`, {
+      .get(buildApiUrl(`/categories/${selectedCategory}`), {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
@@ -72,7 +73,7 @@ export default function CategoryHeaderPage() {
     formData.append('metaDescription', metaDescription);
 
     try {
-      await axios.post('http://localhost:8000/category-header', formData, {
+      await axios.post(buildApiUrl('/category-header'), formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',

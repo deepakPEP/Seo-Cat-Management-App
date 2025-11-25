@@ -2,6 +2,20 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Environment variables
+
+Create a `.env.local` file in the project root (see `env.example` for a template) and set:
+
+```
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_DEEPSEEK_API_KEY=your-deepseek-api-key
+NEXT_PUBLIC_DEEPSEEK_URL=https://api.deepseek.com/chat/completions
+```
+
+- `NEXT_PUBLIC_API_BASE_URL` should match the backend origin for the current environment.
+- `NEXT_PUBLIC_DEEPSEEK_API_KEY` is required only if you use the AI rewrite feature on the products page.
+- `NEXT_PUBLIC_DEEPSEEK_URL` defaults to DeepSeek's chat endpoint but can be overridden if needed.
+
 First, run the development server:
 
 ```bash
@@ -14,7 +28,7 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:7000](http://localhost:7000) with your browser to see the result.
+The dev server is configured to bind to `0.0.0.0`, making it accessible via your EC2 IP address (e.g., `http://13.234.126.192:7000`) or locally at `http://localhost:7000`.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

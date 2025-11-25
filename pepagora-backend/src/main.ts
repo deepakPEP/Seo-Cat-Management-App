@@ -22,8 +22,9 @@ async function bootstrap() {
 
   app.use(cookieParser());
   // ✅ Enable CORS for frontend
+  const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:7000';
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:7000',
+    origin: frontendOrigin,
     credentials: true,
   });
   app.use(helmet()); // ✅ Security headers with Helmet
@@ -57,8 +58,10 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  const port = process.env.PORT || 8000;
-  await app.listen(port);
-  console.log(`🚀 Server running on http://localhost:${port}`);
+  const port = Number(process.env.PORT) || 8000;
+  const host = process.env.APP_HOST || '0.0.0.0';
+  const publicUrl = process.env.APP_PUBLIC_URL || `http://localhost:${port}`;
+  await app.listen(port, host);
+  console.log(`🚀 Server running on ${publicUrl}`);
 }
 void bootstrap();

@@ -1,5 +1,6 @@
 // utils/axiosInstance.ts
 import axios from 'axios';
+import { API_BASE_URL, buildApiUrl } from '@/lib/env';
 
 let accessToken = '';
 
@@ -11,7 +12,7 @@ export function setAccessToken(token: string) {
 }
 
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: API_BASE_URL,
   withCredentials: true,
 });
 
@@ -39,11 +40,7 @@ axiosInstance.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        const res = await axios.post(
-          'http://localhost:8000/auth/refresh',
-          {},
-          { withCredentials: true }
-        );
+        const res = await axios.post(buildApiUrl('/auth/refresh'), {}, { withCredentials: true });
 
         const newAccessToken = res.data.accessToken;
         setAccessToken(newAccessToken);

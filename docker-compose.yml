@@ -1,21 +1,36 @@
 version: "3.9"
+
 services:
   backend:
-    build: ./pepagora-backend
+    build:
+      context: ./pepagora-backend
+      dockerfile: backend.Dockerfile
     container_name: pepagora-backend
-    restart: always
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
       - ./pepagora-backend/.env
+    volumes:
+      - ./pepagora-backend/logs:/usr/src/app/logs
+    networks:
+      - pepagora-network
 
   frontend:
-    build: ./pepagora-frontend
+    build:
+      context: ./pepagora-frontend
+      dockerfile: frontend.Dockerfile
     container_name: pepagora-frontend
-    restart: always
+    restart: unless-stopped
     ports:
       - "7000:7000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000
+    env_file:
+      - ./pepagora-frontend/.env.local
     depends_on:
       - backend
+    networks:
+      - pepagora-network
+
+networks:
+  pepagora-network:
+    driver: bridge

@@ -14,6 +14,7 @@ import { AnimatePresence } from 'framer-motion';
 import HierarchicalFilterSidebar from '@/components/HierarchicalFilterSidebar';
 import HierarchicalBreadcrumb from '@/components/HierarchicalBreadcrumb';
 import { FiChevronRight } from 'react-icons/fi';
+import { DEEPSEEK_API_KEY, DEEPSEEK_API_URL } from '@/lib/env';
 
 type Category = {
   _id: string;
@@ -215,10 +216,14 @@ export default function ProductsPage() {
       toast.error('Please enter a product name first.');
       return;
     }
+    if (!DEEPSEEK_API_KEY || !DEEPSEEK_API_URL) {
+      toast.error('Missing DeepSeek env config. Check NEXT_PUBLIC_DEEPSEEK_* values.');
+      return;
+    }
     setAiLoading(true);
     try {
-      const apiKey = process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY || 'sk-25f236c2be3a42d49914b903ff908670';
-      const apiUrl = process.env.NEXT_PUBLIC_DEEPSEEK_URL || 'https://api.deepseek.com/chat/completions';
+      const apiKey = DEEPSEEK_API_KEY;
+      const apiUrl = DEEPSEEK_API_URL;
       const prompt = `USER: Create content for:\n- Page type: Product\n- Name: ${formName}\n- Markets: INDIA/GCC COUNTRIES/AFRICA\n- Trust signals: https://www.pepagora.com/en/s/trust\n- Languages: {LANGS}\n\nData sources (use in priority order):\nKeywords: {KEYWORDS_JSON}\n\nOUTPUT (return VALID JSON):\n{\n  "keywords": { "head": ["..."], "long_tail": ["..."], "variants": ["..."] },\n  "by_lang": {\n    "<lang>": {\n      "intro_html": "<h1>{PAGE_NAME}</h1><p>120-180 words covering what it is, key use-cases, core specs. Weave 2-3 head terms + long-tails naturally.</p>",\n      "faqs": [{"question": "?", "answer_html": "<p>2-3 sentences</p>"}], // 5-8 items\n      "llm_text": "50-70 words factual summary",\n      "meta": {"title": "≤60 chars", "description": "150-160 chars"},\n      "schema": {"faqpage_jsonld": {...}, "breadcrumb_jsonld": {...}, "itemlist_or_product_jsonld": {...}},\n      "links_html": "<nav aria-label=\"Related\">...</nav>"\n    }\n  }\n}\n\nRULES: Prefer supplied data. Weave keywords naturally. Clean HTML. Vendor-neutral. One H1 only.`;
       const res = await fetch(apiUrl, {
         method: 'POST',

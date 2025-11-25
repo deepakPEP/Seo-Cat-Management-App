@@ -1,25 +1,9 @@
-// // utils/axiosInstance.ts
-// import axios from 'axios';
 
-// const axiosInstance = axios.create({
-//   baseURL: 'http://localhost:8000',
-//   withCredentials: true,
-// });
-
-// axiosInstance.interceptors.request.use((config) => {
-//   const token = localStorage.getItem('accessToken');
-//   if (token) {
-//     config.headers.Authorization = `Bearer ${token}`;
-//   }
-//   return config;
-// });
-
-// export default axiosInstance;
-// lib/axiosInstance.ts
 import axios from 'axios';
+import { API_BASE_URL, buildApiUrl } from './env';
 
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: API_BASE_URL,
   withCredentials: true, // required for sending the refreshToken cookie
 });
 
@@ -46,11 +30,7 @@ axiosInstance.interceptors.response.use(
 
       try {
         // Call refresh endpoint (cookies will be sent automatically)
-        const res = await axios.post(
-          'http://localhost:8000/auth/refresh',
-          {},
-          { withCredentials: true }
-        );
+        const res = await axios.post(buildApiUrl('/auth/refresh'), {}, { withCredentials: true });
 
         const newAccessToken = res.data.accessToken;
 
