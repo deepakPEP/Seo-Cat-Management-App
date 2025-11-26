@@ -414,14 +414,7 @@ export default function CategoriesPage() {
       }
       try {
         const res = await axiosInstance.get(`/subcategories/${filterSelection.subcategory._id}/productcategories`);
-        let data = [];
-        if (res.data?.data?.data) {
-          data = res.data.data.data;
-        } else if (Array.isArray(res.data?.data)) {
-          data = res.data.data;
-        } else if (Array.isArray(res.data)) {
-          data = res.data;
-        }
+        const data = res.data?.data?.data || res.data?.data || res.data || [];
         setProductCategories(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('Error fetching product categories:', err);
@@ -593,7 +586,7 @@ export default function CategoriesPage() {
       if (currentLevel === 'productCategory') {
         if (filterSelection.subcategory) {
           const res = await axiosInstance.get(`/subcategories/${filterSelection.subcategory._id}/productcategories`);
-          let data = res.data?.data?.data || res.data?.data || res.data;
+          const data = res.data?.data?.data || res.data?.data || res.data;
           setProductCategories(Array.isArray(data) ? data : []);
         }
       } else if (currentLevel === 'subcategory') {
