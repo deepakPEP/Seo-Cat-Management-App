@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
-import { Db, ObjectId } from 'mongodb';
+import { Db, ObjectId, MongoClient } from 'mongodb';
 
 type CategoryDocument = {
   _id: ObjectId;
@@ -38,7 +38,7 @@ type LiveProductDocument = {
 export class MarketingService {
   private readonly metaDb: Db;
 
-  constructor(@InjectConnection() private readonly connection: Connection) {
+  constructor(@InjectConnection('analytics') private readonly connection: Connection) {
     // Access the native MongoDB client from Mongoose connection
     // Try multiple ways to get the client depending on Mongoose version
     let client: any;
@@ -53,10 +53,10 @@ export class MarketingService {
     }
     
     if (!client) {
-      throw new Error('MongoDB client not available from connection');
+      throw new Error('MongoDB client not available from analytics connection');
     }
     
-    this.metaDb = client.db('metaData');
+    this.metaDb = client.db('pepagoraDb');
   }
 
   private toObjectId(id: string | ObjectId | undefined | null): ObjectId | null {
