@@ -72,17 +72,6 @@ type TokenPayload = {
 };
 
 // Helper to download AI response as response.txt
-function downloadResponseTxt(content: string) {
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'response.txt';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
 
 // Helper to extract JSON from AI response (handles markdown code blocks)
 function extractJSON(text: string): any {
@@ -164,38 +153,31 @@ export default function CategoriesPage() {
     setAiLoading(true);
     try {
       const prompt = `USER: Create content for:\n- Page type: Category\n- Name: ${editForm.name}\n- URL: ${editForm.liveUrl}\n- Markets: INDIA/GCC COUNTRIES/AFRICA\n- Trust signals: https://www.pepagora.com/en/s/trust\n- Languages: {LANGS}\n\nData sources (use in priority order):\nKeywords: {KEYWORDS_JSON}\n\nOUTPUT (return VALID JSON):\n{\n  "keywords": { "head": ["..."], "long_tail": ["..."], "variants": ["..."] },\n  "by_lang": {\n    "<lang>": {\n      "intro_html": "<h1>{PAGE_NAME}</h1><p>120-180 words covering what it is, key use-cases, core specs. Weave 2-3 head terms + long-tails naturally.</p>",\n      "faqs": [{"question": "?", "answer_html": "<p>2-3 sentences</p>"}], // 5-8 items\n      "llm_text": "50-70 words factual summary",\n      "meta": {"title": "≤60 chars", "description": "150-160 chars"},\n      "schema": {"faqpage_jsonld": {...}, "breadcrumb_jsonld": {...}, "itemlist_or_product_jsonld": {...}},\n      "links_html": "<nav aria-label=\"Related\">...</nav>"\n    }\n  }\n}\n\nRULES: Prefer supplied data. Weave keywords naturally. Clean HTML. Vendor-neutral. One H1 only.`;
-      const response = await axios.post(
-        'https://api.deepseek.com/chat/completions',
-        {
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: 'You are an expert B2B content strategist for Pepagora.com. Create SEO + LLM-optimized content for a Category / subcategory / product category page. Write concise, factual, globally readable copy. Use supplied data first; only generalize with industry knowledge if data is missing. Avoid unverified claims.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 2048
-        },
-        {
-          headers: {
-            'Authorization': `Bearer sk-25f236c2be3a42d49914b903ff908670`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      const aiText = response.data.choices?.[0]?.message?.content || '';
+      const res = await axiosInstance.post('/ai/deepseek', {
+        prompt,
+        pageType: 'Category',
+      });
+      // ResponseInterceptor wraps: { success, timestamp, data: { statusCode, message, data: { content } } }
+      const aiText = res.data?.data?.data?.content || '';
       if (aiText) {
-        downloadResponseTxt(aiText);
         try {
           const json = extractJSON(aiText);
+          // Get the first available language or use 'en' as default
+          const langKeys = json.by_lang ? Object.keys(json.by_lang) : [];
+          const langKey = langKeys.includes('en') ? 'en' : (langKeys[0] || '<lang>');
+          const langData = json.by_lang?.[langKey] || json.by_lang?.['<lang>'] || {};
+          
           // Fill fields from JSON
           setEditForm(prev => ({
             ...prev,
-            metaTitle: json.by_lang?.['<lang>']?.meta?.title || prev.metaTitle,
+            metaTitle: langData.meta?.title || prev.metaTitle,
             metaKeyword: (json.keywords?.head || []).join(', '),
-            metaDescription: json.by_lang?.['<lang>']?.meta?.description || prev.metaDescription,
-            description: json.by_lang?.['<lang>']?.intro_html || prev.description
+            metaDescription: langData.meta?.description || prev.metaDescription,
+            description: langData.intro_html || prev.description
           }));
           toast.success('Fields rewritten with AI!');
         } catch (e) {
+          console.error('Error parsing AI response:', e);
           toast.error('AI response is not valid JSON.');
         }
       }
@@ -216,26 +198,13 @@ export default function CategoriesPage() {
     setAiLoadingCreate(true);
     try {
       const prompt = `USER: Create content for:\n- Page type: Category\n- Name: ${name}\n- URL: ${imageUrl || ''}\n- Markets: INDIA/GCC COUNTRIES/AFRICA\n- Trust signals: https://www.pepagora.com/en/s/trust\n- Languages: {LANGS}\n\nData sources (use in priority order):\nKeywords: {KEYWORDS_JSON}\n\nOUTPUT (return VALID JSON):\n{\n  "keywords": { "head": ["..."], "long_tail": ["..."], "variants": ["..."] },\n  "by_lang": {\n    "<lang>": {\n      "intro_html": "<h1>{PAGE_NAME}</h1><p>120-180 words covering what it is, key use-cases, core specs. Weave 2-3 head terms + long-tails naturally.</p>",\n      "faqs": [{"question": "?", "answer_html": "<p>2-3 sentences</p>"}], // 5-8 items\n      "llm_text": "50-70 words factual summary",\n      "meta": {"title": "≤60 chars", "description": "150-160 chars"},\n      "schema": {"faqpage_jsonld": {...}, "breadcrumb_jsonld": {...}, "itemlist_or_product_jsonld": {...}},\n      "links_html": "<nav aria-label=\"Related\">...</nav>"\n    }\n  }\n}\n\nRULES: Prefer supplied data. Weave keywords naturally. Clean HTML. Vendor-neutral. One H1 only.`;
-      const response = await axios.post(
-        'https://api.deepseek.com/chat/completions',
-        {
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: 'You are an expert B2B content strategist for Pepagora.com. Create SEO + LLM-optimized content for a Category / subcategory / product category page. Write concise, factual, globally readable copy. Use supplied data first; only generalize with industry knowledge if data is missing. Avoid unverified claims.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 2048
-        },
-        {
-          headers: {
-            'Authorization': `Bearer sk-25f236c2be3a42d49914b903ff908670`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      const aiText = response.data.choices?.[0]?.message?.content || '';
+      const res = await axiosInstance.post('/ai/deepseek', {
+        prompt,
+        pageType: 'Category',
+      });
+      // ResponseInterceptor wraps: { success, timestamp, data: { statusCode, message, data: { content } } }
+      const aiText = res.data?.data?.data?.content || '';
       if (aiText) {
-        downloadResponseTxt(aiText);
         try {
           const json = extractJSON(aiText);
           setMetaTitle(json.by_lang?.['<lang>']?.meta?.title || metaTitle);
@@ -263,24 +232,11 @@ export default function CategoriesPage() {
     setAiLoading(true);
     try {
       const prompt = `Rewrite the following category details for SEO.\nCategory Name: ${editForm.name}\nGenerate:\n- Meta Title\n- Meta Keywords\n- Meta Description\n- Description (short paragraph)`;
-      const response = await axios.post(
-        'https://api.deepseek.com/chat/completions',
-        {
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: 'You are an expert SEO content writer.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 512
-        },
-        {
-          headers: {
-            'Authorization': `Bearer sk-25f236c2be3a42d49914b903ff908670`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      const aiText = response.data.choices?.[0]?.message?.content || '';
+      const res = await axiosInstance.post('/ai/deepseek', {
+        prompt,
+        pageType: 'Category',
+      });
+      const aiText = res.data.data.content || '';
       const metaTitleMatch = aiText.match(/Meta Title\s*[:\-]?\s*(.*)/i);
       const metaKeywordMatch = aiText.match(/Meta Keywords?\s*[:\-]?\s*(.*)/i);
       const metaDescriptionMatch = aiText.match(/Meta Description\s*[:\-]?\s*(.*)/i);
@@ -517,25 +473,13 @@ export default function CategoriesPage() {
       Meta Keywords: [keywords]
       Meta Description: [description]`;
 
-      const response = await axios.post(
-        'https://api.deepseek.com/chat/completions',
-        {
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: 'You are an expert SEO content writer. Create compelling, search-optimized meta content for e-commerce categories.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 512
-        },
-        {
-          headers: {
-            'Authorization': 'Bearer sk-25f236c2be3a42d49914b903ff908670',
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const res = await axiosInstance.post('/ai/deepseek', {
+        prompt,
+        pageType: 'Category',
+      });
 
-      const aiText = response.data.choices?.[0]?.message?.content || '';
+      // ResponseInterceptor wraps: { success, timestamp, data: { statusCode, message, data: { content } } }
+      const aiText = res.data?.data?.data?.content || '';
       
       if (aiText) {
         // Parse the AI response

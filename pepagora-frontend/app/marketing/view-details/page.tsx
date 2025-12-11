@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import axiosInstance from '../../../lib/axiosInstance';
 import { useAuth } from '@/components/hooks/useAuth';
+import { toast } from 'react-toastify';
 
 type Category = {
   _id: string;
@@ -61,6 +62,12 @@ export default function ViewDetailsPage() {
   };
 
   const handleGenerateReport = async () => {
+    // Show info toast when report generation starts
+    toast.info('Grab a coffee!! I have a huge data to consolidate. I will let you know once report is available.', {
+      position: 'top-right',
+      autoClose: 5000,
+    });
+    
     setGeneratingReport(true);
     try {
       const response = await axiosInstance.get('/marketing/report/excel', {
@@ -75,9 +82,15 @@ export default function ViewDetailsPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      
+      // Show success toast when report is generated
+      toast.success('Report Generated', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
     } catch (err) {
       console.error('Error generating report:', err);
-      alert('Failed to generate report');
+      toast.error('Failed to generate report');
     } finally {
       setGeneratingReport(false);
     }

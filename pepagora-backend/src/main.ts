@@ -22,10 +22,13 @@ async function bootstrap() {
 
   app.use(cookieParser());
   // ✅ Enable CORS for frontend (supports both local and production)
+  // Development URLs (hardcoded for local dev, can be overridden via env)
+  // In production, FRONTEND_URL should be set via environment variables
+  const frontendPort = process.env.FRONTEND_PORT || '7000';
   const allowedOrigins = [
-    'http://localhost:7000',
-    'http://127.0.0.1:7000',
-    process.env.FRONTEND_URL, // Production URL from env
+    process.env.FRONTEND_URL_LOCALHOST || `http://localhost:${frontendPort}`,
+    process.env.FRONTEND_URL_127 || `http://127.0.0.1:${frontendPort}`,
+    process.env.FRONTEND_URL, // Production URL from env (required in production)
   ].filter(Boolean); // Remove undefined values
 
   app.enableCors({

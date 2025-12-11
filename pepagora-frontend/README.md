@@ -7,14 +7,11 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 Create a `.env.local` file in the project root (see `env.example` for a template) and set:
 
 ```
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-NEXT_PUBLIC_DEEPSEEK_API_KEY=your-deepseek-api-key
-NEXT_PUBLIC_DEEPSEEK_URL=https://api.deepseek.com/chat/completions
+API_BASE_URL=http://localhost:8000
 ```
 
-- `NEXT_PUBLIC_API_BASE_URL` should match the backend origin for the current environment.
-- `NEXT_PUBLIC_DEEPSEEK_API_KEY` is required only if you use the AI rewrite feature on the products page.
-- `NEXT_PUBLIC_DEEPSEEK_URL` defaults to DeepSeek's chat endpoint but can be overridden if needed.
+- `API_BASE_URL` should match the backend origin for the current environment.
+- **Note:** `DEEPSEEK_API_KEY` and `DEEPSEEK_URL` are now configured on the backend server for security. The frontend calls the backend endpoint at `/ai/deepseek` instead of calling DeepSeek API directly.
 
 First, run the development server:
 
