@@ -14,7 +14,6 @@ import { AnimatePresence } from 'framer-motion';
 import HierarchicalFilterSidebar from '@/components/HierarchicalFilterSidebar';
 import HierarchicalBreadcrumb from '@/components/HierarchicalBreadcrumb';
 import { FiChevronRight } from 'react-icons/fi';
-import { DEEPSEEK_API_KEY, DEEPSEEK_API_URL } from '@/lib/env';
 
 type Category = {
   _id: string;
@@ -197,18 +196,6 @@ export default function ProductsPage() {
     }
   };
 
-  // Helper to download response.txt
-  function downloadResponseTxt(content: string) {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'response.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
 
   // DeepSeek AI handler for full JSON
   async function handleRewriteAllAI() {
@@ -216,49 +203,47 @@ export default function ProductsPage() {
       toast.error('Please enter a product name first.');
       return;
     }
-    if (!DEEPSEEK_API_KEY || !DEEPSEEK_API_URL) {
-      toast.error('Missing DeepSeek env config. Check NEXT_PUBLIC_DEEPSEEK_* values.');
-      return;
-    }
     setAiLoading(true);
     try {
-      const apiKey = DEEPSEEK_API_KEY;
-      const apiUrl = DEEPSEEK_API_URL;
       const prompt = `USER: Create content for:\n- Page type: Product\n- Name: ${formName}\n- Markets: INDIA/GCC COUNTRIES/AFRICA\n- Trust signals: https://www.pepagora.com/en/s/trust\n- Languages: {LANGS}\n\nData sources (use in priority order):\nKeywords: {KEYWORDS_JSON}\n\nOUTPUT (return VALID JSON):\n{\n  "keywords": { "head": ["..."], "long_tail": ["..."], "variants": ["..."] },\n  "by_lang": {\n    "<lang>": {\n      "intro_html": "<h1>{PAGE_NAME}</h1><p>120-180 words covering what it is, key use-cases, core specs. Weave 2-3 head terms + long-tails naturally.</p>",\n      "faqs": [{"question": "?", "answer_html": "<p>2-3 sentences</p>"}], // 5-8 items\n      "llm_text": "50-70 words factual summary",\n      "meta": {"title": "≤60 chars", "description": "150-160 chars"},\n      "schema": {"faqpage_jsonld": {...}, "breadcrumb_jsonld": {...}, "itemlist_or_product_jsonld": {...}},\n      "links_html": "<nav aria-label=\"Related\">...</nav>"\n    }\n  }\n}\n\nRULES: Prefer supplied data. Weave keywords naturally. Clean HTML. Vendor-neutral. One H1 only.`;
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: 'You are an expert B2B content strategist for Pepagora.com. Create SEO + LLM-optimized content for a Product page. Write concise, factual, globally readable copy. Use supplied data first; only generalize with industry knowledge if data is missing. Avoid unverified claims.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 2048
-        }),
+      
+      const res = await axiosInstance.post('/ai/deepseek', {
+        prompt,
+        pageType: 'Product',
       });
-      const data = await res.json();
-      const aiText = data.choices?.[0]?.message?.content?.trim() || '';
+      
+      // ResponseInterceptor wraps: { success, timestamp, data: { statusCode, message, data: { content } } }
+      const aiText = res.data?.data?.data?.content || '';
+      
       if (aiText) {
-        downloadResponseTxt(aiText);
         try {
           const json = extractJSON(aiText);
-          setFormMetaTitle(json.by_lang?.['<lang>']?.meta?.title || '');
+          
+          // Get the first available language or use 'en' as default
+          const langKeys = json.by_lang ? Object.keys(json.by_lang) : [];
+          const langKey = langKeys.includes('en') ? 'en' : (langKeys[0] || '<lang>');
+          const langData = json.by_lang?.[langKey] || json.by_lang?.['<lang>'] || {};
+          
+          setFormMetaTitle(langData.meta?.title || '');
           setFormMetaKeyword((json.keywords?.head || []).join(', '));
-          setFormMetaDescription(json.by_lang?.['<lang>']?.meta?.description || '');
-          setFormDescription(json.by_lang?.['<lang>']?.intro_html || '');
+          setFormMetaDescription(langData.meta?.description || '');
+          setFormDescription(langData.intro_html || '');
+          
           toast.success('Fields rewritten with AI!');
-        } catch {
+        } catch (error) {
           toast.error('AI response is not valid JSON.');
         }
       } else {
         toast.error('AI did not return a result');
       }
-    } catch {
-      toast.error('AI rewrite failed');
+    } catch (error: any) {
+      // Extract error message from nested response structure
+      const errorMessage = 
+        error.response?.data?.data?.message || 
+        error.response?.data?.message || 
+        error.message || 
+        'AI rewrite failed';
+      toast.error(errorMessage);
     } finally {
       setAiLoading(false);
     }
@@ -472,28 +457,13 @@ useEffect(()=>{
       Meta Keywords: [keywords]
       Meta Description: [description]`;
 
-      const response = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer sk-25f236c2be3a42d49914b903ff908670',
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: 'You are an expert SEO content writer. Create compelling, search-optimized meta content for e-commerce products.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 512
-        }),
+      const res = await axiosInstance.post('/ai/deepseek', {
+        prompt,
+        pageType: 'Product',
       });
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const aiText = data.choices?.[0]?.message?.content || '';
+      // ResponseInterceptor wraps: { success, timestamp, data: { statusCode, message, data: { content } } }
+      const aiText = res.data?.data?.data?.content || '';
       
       if (!aiText) {
         throw new Error('No content returned from AI');
