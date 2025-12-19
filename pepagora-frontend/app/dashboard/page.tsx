@@ -103,7 +103,7 @@ const fetch = async () => {
 
     if (userRole !== 'marketing_team') {
       try {
-        const productsRes = await axiosInstance.get('/products');
+        const productsRes = await axiosInstance.get('/productcategories');
         const data3 = Array.isArray(productsRes.data?.data?.data)
           ? productsRes.data.data.data
           : [];
@@ -124,7 +124,7 @@ const fetch = async () => {
     }
 
     try {
-      const res = await axiosInstance.get('/products/count');
+      const res = await axiosInstance.get('/productcategories/count');
       const count = res.data?.data?.count ?? 0;
       setProductCount(userRole === 'marketing_team' ? 0 : count);
     } catch (err) {

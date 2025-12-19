@@ -139,7 +139,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProdu
         metaDescription: formData.metaDescription
       };
 
-      const response = await axiosInstance.post('/products', payload);
+      const response = await axiosInstance.post('/productcategories', payload);
       if (response.status === 201) {
         toast.success('Product created successfully!');
         resetForm();

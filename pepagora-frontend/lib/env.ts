@@ -1,21 +1,29 @@
 const normalizeBaseUrl = (url: string) => url.replace(/\/+$/, '');
 
-const readEnv = (key: string, fallback = '') => {
-  const value = process.env[key];
-    // console.log(`env Reading ${key}:`, value ? `"${value}" (from env)` : `"${fallback}" (fallback)`);
-  if (typeof value === 'string' && value.trim() !== '') {
-    return value.trim();
-  }
-  return fallback;
-};
+// Read NEXT_PUBLIC_API_BASE_URL from environment variables
+// Note: NEXT_PUBLIC_ prefix is required for Next.js to expose the variable to client-side code
+const envApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-// Fallback to localhost:8000 for development if API_BASE_URL is not set
-// In production, API_BASE_URL should always be set via environment variables
-const rawBaseUrl = readEnv('API_BASE_URL', 'http://localhost:8000');
+if (!envApiBaseUrl || typeof envApiBaseUrl !== 'string' || envApiBaseUrl.trim() === '') {
+  console.error(
+    '❌ ERROR: NEXT_PUBLIC_API_BASE_URL is not set in your environment variables!\n' +
+    'Please create a .env.local file in pepagora-frontend/ with:\n' +
+    'NEXT_PUBLIC_API_BASE_URL=http://localhost:9000\n' +
+    '\n' +
+    'Current value:', envApiBaseUrl
+  );
+  throw new Error(
+    'NEXT_PUBLIC_API_BASE_URL environment variable is required. ' +
+    'Please set it in your .env.local file.'
+  );
+}
+
+const rawBaseUrl = envApiBaseUrl.trim();
 export const API_BASE_URL = normalizeBaseUrl(rawBaseUrl);
 
-// Debug: Remove this after confirming env is loaded correctly
-// console.log('[env] API_BASE_URL:', API_BASE_URL);
+// Debug: Log the environment variable being used
+console.log('[env] ✅ NEXT_PUBLIC_API_BASE_URL from process.env:', envApiBaseUrl);
+console.log('[env] ✅ Final API_BASE_URL:', API_BASE_URL);
 
 export const buildApiUrl = (path: string = '') => {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;

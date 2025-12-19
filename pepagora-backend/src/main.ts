@@ -14,6 +14,7 @@ import { winstonLogger } from './common/logger/winston-logger.service';
 
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
+import { log } from 'node:console';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -74,6 +75,7 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   const port = Number(process.env.PORT) || 8000;
+  console.log('Starting server...', process.env.PORT);
   const host = process.env.APP_HOST || '0.0.0.0';
   const publicUrl = process.env.APP_PUBLIC_URL || `http://localhost:${port}`;
   await app.listen(port, host);
