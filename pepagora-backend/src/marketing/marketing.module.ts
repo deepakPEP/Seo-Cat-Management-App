@@ -5,6 +5,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MarketingController } from './marketing.controller';
 // @ts-ignore - TypeScript resolver does not recognize .ts during lint phase
 import { MarketingService } from './marketing.service';
+// @ts-ignore - TypeScript resolver does not recognize .ts during lint phase
+import { AnalyticsService } from './analytics.service';
 
 @Module({
   imports: [
@@ -19,7 +21,7 @@ import { MarketingService } from './marketing.service';
     }),
   ],
   controllers: [MarketingController],
-  providers: [MarketingService],
-  exports: [MarketingService],
+  providers: [MarketingService, AnalyticsService],
+  exports: [MarketingService, AnalyticsService],
 })
 export class MarketingModule {}

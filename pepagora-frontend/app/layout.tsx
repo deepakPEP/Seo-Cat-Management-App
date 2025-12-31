@@ -3,9 +3,9 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 export const metadata = {
-  title: 'Your App Title',
+  title: 'Pepagora-Analytics',
   icons: {
-    icon: '/blank-icon.png',
+    icon: '/pepagora-logo.png',
   },
 };
 

@@ -8,6 +8,7 @@ type CategoryDocument = {
   name?: string;
   main_cat_name?: string;
   mappedChildren?: (string | ObjectId)[];
+  liveUrl?: string;
 };
 
 type SubcategoryDocument = {
@@ -16,6 +17,7 @@ type SubcategoryDocument = {
   sub_cat_name?: string;
   mappedChildren?: (string | ObjectId)[];
   parentId?: string | ObjectId;
+  liveUrl?: string;
 };
 
 type ProductCategoryDocument = {
@@ -23,6 +25,7 @@ type ProductCategoryDocument = {
   name?: string;
   product_category_name?: string;
   parentId?: string | ObjectId;
+  liveUrl?: string;
 };
 
 type LiveProductDocument = {
@@ -211,13 +214,14 @@ export class MarketingService {
     try {
       const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
       const categories = await categoriesCollection
-        .find({}, { projection: { name: 1, main_cat_name: 1 } })
+        .find({})
         .sort({ name: 1, main_cat_name: 1 })
         .toArray();
 
       return categories.map((cat) => ({
         _id: cat._id.toString(),
         name: this.getCategoryName(cat),
+        liveUrl: cat.liveUrl || null,
       }));
     } catch (error) {
       throw new BadRequestException('Failed to fetch categories');
@@ -233,7 +237,10 @@ export class MarketingService {
       const categoryObjectId = this.toObjectId(categoryId);
       if (!categoryObjectId) throw new BadRequestException('Invalid category ID');
 
-      const category = await categoriesCollection.findOne({ _id: categoryObjectId });
+      const category = await categoriesCollection.findOne(
+        { _id: categoryObjectId }
+        // Don't use projection to ensure we get all fields including liveUrl
+      );
       if (!category) throw new BadRequestException('Category not found');
 
       const mappedChildren = Array.isArray(category.mappedChildren)
@@ -255,6 +262,7 @@ export class MarketingService {
         category: {
           _id: categoryObjectId.toString(),
           name: this.getCategoryName(category),
+          liveUrl: category.liveUrl || null,
         },
         subcategories: subcategories.map((sub) => ({
           _id: sub._id.toString(),
@@ -277,7 +285,10 @@ export class MarketingService {
       const subcategoryObjectId = this.toObjectId(subcategoryId);
       if (!subcategoryObjectId) throw new BadRequestException('Invalid subcategory ID');
 
-      const subcategory = await subcategoriesCollection.findOne({ _id: subcategoryObjectId });
+      const subcategory = await subcategoriesCollection.findOne(
+        { _id: subcategoryObjectId }
+        // Don't use projection to ensure we get all fields including liveUrl
+      );
       if (!subcategory) throw new BadRequestException('Subcategory not found');
 
       const productCategories = await productCategoriesCollection
@@ -289,21 +300,43 @@ export class MarketingService {
         mappedChildren: { $in: [subcategory._id.toString()] },
       });
 
-      // Get product count for each product category
-      const productCategoriesWithCounts = await Promise.all(
-        productCategories.map(async (pc) => {
-          // Query using ObjectId - ensure we're using the correct field structure
-          const productCount = await liveProductsCollection.countDocuments({
-            'productCategory._id': pc._id,
-          });
-          
-          return {
-            _id: pc._id.toString(),
-            name: this.getProductCategoryName(pc),
-            productCount: productCount || 0, // Ensure it's always a number
-          };
-        })
-      );
+      // OPTIMIZATION: Batch query for product counts using aggregation pipeline
+      const productCategoryIds = productCategories.map((pc) => pc._id);
+      const productCountsMap = new Map<string, number>();
+
+      if (productCategoryIds.length > 0) {
+        // Get all product counts in one aggregation query instead of N queries
+        const productCountsAggregation = await liveProductsCollection
+          .aggregate([
+            {
+              $match: {
+                'productCategory._id': { $in: productCategoryIds },
+              },
+            },
+            {
+              $group: {
+                _id: '$productCategory._id',
+                count: { $sum: 1 },
+              },
+            },
+          ])
+          .toArray();
+
+        // Create a map for O(1) lookup
+        for (const result of productCountsAggregation) {
+          productCountsMap.set(result._id.toString(), result.count);
+        }
+      }
+
+      // Map product categories with pre-fetched counts
+      const productCategoriesWithCounts = productCategories.map((pc) => {
+        const productCount = productCountsMap.get(pc._id.toString()) || 0;
+        return {
+          _id: pc._id.toString(),
+          name: this.getProductCategoryName(pc),
+          productCount,
+        };
+      });
 
       return {
         category: category
@@ -315,6 +348,7 @@ export class MarketingService {
         subcategory: {
           _id: subcategory._id.toString(),
           name: this.getSubcategoryName(subcategory),
+          liveUrl: subcategory.liveUrl || null,
         },
         productCategories: productCategoriesWithCounts,
       };
@@ -336,7 +370,10 @@ export class MarketingService {
         throw new BadRequestException('Invalid product category ID');
       }
 
-      const productCategory = await productCategoriesCollection.findOne({ _id: productCategoryObjectId });
+      const productCategory = await productCategoriesCollection.findOne(
+        { _id: productCategoryObjectId }
+        // Don't use projection to ensure we get all fields including liveUrl
+      );
       if (!productCategory) {
         throw new BadRequestException('Product category not found');
       }
@@ -374,6 +411,7 @@ export class MarketingService {
         productCategory: {
           _id: productCategory._id.toString(),
           name: this.getProductCategoryName(productCategory),
+          liveUrl: productCategory.liveUrl || null,
         },
         products: products.map((product) => ({
           _id: product._id.toString(),
@@ -386,7 +424,7 @@ export class MarketingService {
     }
   }
 
-  // Generate Excel report data
+  // Generate Excel report data - OPTIMIZED VERSION
   async generateExcelReportData(): Promise<any[]> {
     try {
       const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
@@ -394,18 +432,20 @@ export class MarketingService {
       const productCategoriesCollection = this.metaDb.collection<ProductCategoryDocument>('productcategories');
       const liveProductsCollection = this.metaDb.collection<LiveProductDocument>('liveproducts');
 
-      const categories = await categoriesCollection
-        .find({}, { projection: { name: 1, main_cat_name: 1, mappedChildren: 1 } })
-        .toArray();
+      // Fetch all data in parallel
+      const [categories, subcategories, productCategories] = await Promise.all([
+        categoriesCollection
+          .find({}, { projection: { name: 1, main_cat_name: 1, mappedChildren: 1 } })
+          .toArray(),
+        subcategoriesCollection
+          .find({}, { projection: { name: 1, sub_cat_name: 1, mappedChildren: 1 } })
+          .toArray(),
+        productCategoriesCollection
+          .find({}, { projection: { name: 1, product_category_name: 1 } })
+          .toArray(),
+      ]);
 
-      const subcategories = await subcategoriesCollection
-        .find({}, { projection: { name: 1, sub_cat_name: 1, mappedChildren: 1 } })
-        .toArray();
-
-      const productCategories = await productCategoriesCollection
-        .find({}, { projection: { name: 1, product_category_name: 1 } })
-        .toArray();
-
+      // Create lookup maps
       const subcatById = new Map<string, SubcategoryDocument>();
       subcategories.forEach((subcat) => {
         subcatById.set(subcat._id.toString(), subcat);
@@ -416,13 +456,64 @@ export class MarketingService {
         prodcatById.set(prodcat._id.toString(), prodcat);
       });
 
+      // Collect all product category IDs for batch query
+      const allProductCategoryIds: ObjectId[] = [];
+      for (const category of categories) {
+        const mappedChildren = Array.isArray(category.mappedChildren) ? category.mappedChildren : [];
+        for (const subcatId of mappedChildren) {
+          const subcat = subcatById.get(subcatId.toString());
+          if (!subcat) continue;
+          const mappedProductChildren = Array.isArray(subcat.mappedChildren) ? subcat.mappedChildren : [];
+          for (const prodcatId of mappedProductChildren) {
+            const prodcatObjectId = this.toObjectId(prodcatId as string | ObjectId);
+            if (prodcatObjectId) {
+              allProductCategoryIds.push(prodcatObjectId);
+            }
+          }
+        }
+      }
+
+      // OPTIMIZATION: Batch query for product counts using aggregation pipeline
+      const productCountsMap = new Map<string, number>();
+      const sampleProductsMap = new Map<string, string>();
+
+      if (allProductCategoryIds.length > 0) {
+        // Get product counts for all product categories in one query
+        const productCountsAggregation = await liveProductsCollection
+          .aggregate([
+            {
+              $match: {
+                'productCategory._id': { $in: allProductCategoryIds },
+              },
+            },
+            {
+              $group: {
+                _id: '$productCategory._id',
+                count: { $sum: 1 },
+                sampleProducts: {
+                  $push: { $ifNull: ['$productName', 'Unnamed Product'] },
+                },
+              },
+            },
+          ])
+          .toArray();
+
+        // Process aggregation results
+        for (const result of productCountsAggregation) {
+          const productCategoryId = result._id.toString();
+          productCountsMap.set(productCategoryId, result.count);
+          // Get first 5 product names as samples
+          const samples = result.sampleProducts.slice(0, 5);
+          sampleProductsMap.set(productCategoryId, samples.join(', '));
+        }
+      }
+
+      // Build hierarchy with pre-fetched data
       const hierarchy: any[] = [];
 
       for (const category of categories) {
         const categoryName = this.getCategoryName(category);
-        const mappedChildren = Array.isArray(category.mappedChildren)
-          ? category.mappedChildren
-          : [];
+        const mappedChildren = Array.isArray(category.mappedChildren) ? category.mappedChildren : [];
 
         if (mappedChildren.length === 0) {
           hierarchy.push({
@@ -440,9 +531,7 @@ export class MarketingService {
           if (!subcat) continue;
 
           const subcategoryName = this.getSubcategoryName(subcat);
-          const mappedProductChildren = Array.isArray(subcat.mappedChildren)
-            ? subcat.mappedChildren
-            : [];
+          const mappedProductChildren = Array.isArray(subcat.mappedChildren) ? subcat.mappedChildren : [];
 
           if (mappedProductChildren.length === 0) {
             hierarchy.push({
@@ -462,21 +551,13 @@ export class MarketingService {
             const productCategoryName = this.getProductCategoryName(prodcat);
             const productCategoryObjectId = this.toObjectId(prodcatId as string | ObjectId);
 
-            const productCount = productCategoryObjectId
-              ? await liveProductsCollection.countDocuments({
-                  'productCategory._id': productCategoryObjectId,
-                })
-              : 0;
-
-            let sampleProducts = '';
-            if (productCategoryObjectId && productCount > 0) {
-              const products = await liveProductsCollection
-                .find({ 'productCategory._id': productCategoryObjectId }, { projection: { productName: 1 } })
-                .toArray();
-              sampleProducts = products
-                .map((product) => product.productName ?? 'Unnamed Product')
-                .join(', ');
+            if (!productCategoryObjectId) {
+              continue;
             }
+
+            const productCategoryIdStr = productCategoryObjectId.toString();
+            const productCount = productCountsMap.get(productCategoryIdStr) || 0;
+            const sampleProducts = sampleProductsMap.get(productCategoryIdStr) || '';
 
             hierarchy.push({
               category: categoryName,
@@ -491,6 +572,7 @@ export class MarketingService {
 
       return hierarchy;
     } catch (error) {
+      console.error('[Marketing Service] Error generating Excel report:', error);
       throw new BadRequestException('Failed to generate report');
     }
   }

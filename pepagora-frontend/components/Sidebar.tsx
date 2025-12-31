@@ -54,24 +54,24 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         icon: <FiHome size={20} />,
         gradient: 'from-blue-500 to-blue-600'
       },
-      { 
-        href: '/categories', 
-        label: 'Categories', 
-        icon: <FiLayers size={20} />,
-        gradient: 'from-green-500 to-green-600'
-      },
-      { 
-        href: '/subcategories', 
-        label: 'Subcategories', 
-        icon: <FiGrid size={20} />,
-        gradient: 'from-yellow-500 to-yellow-600'
-      },
-      { 
-        href: '/products', 
-        label: 'Product Categories', 
-        icon: <FiBox size={20} />,
-        gradient: 'from-purple-500 to-purple-600'
-      },
+      // { 
+      //   href: '/categories', 
+      //   label: 'Categories', 
+      //   icon: <FiLayers size={20} />,
+      //   gradient: 'from-green-500 to-green-600'
+      // },
+      // { 
+      //   href: '/subcategories', 
+      //   label: 'Subcategories', 
+      //   icon: <FiGrid size={20} />,
+      //   gradient: 'from-yellow-500 to-yellow-600'
+      // },
+      // { 
+      //   href: '/products', 
+      //   label: 'Product Categories', 
+      //   icon: <FiBox size={20} />,
+      //   gradient: 'from-purple-500 to-purple-600'
+      // },
       { 
         href: '/marketing/view-details', 
         label: 'View Analytics', 

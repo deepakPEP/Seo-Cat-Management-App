@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import axiosInstance from "../../../../../../lib/axiosInstance";
 import { useAuth } from "@/components/hooks/useAuth";
+import GoogleAnalyticsCard from "@/components/GoogleAnalyticsCard";
 
 type Subcategory = {
   _id: string;
@@ -14,6 +15,7 @@ type Subcategory = {
 type Category = {
   _id: string;
   name: string;
+  liveUrl?: string | null;
 };
 
 export default function SubcategoriesPage() {
@@ -110,7 +112,7 @@ export default function SubcategoriesPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900 m-2">
-                    Sub Categories of {category?.name}
+                    Category :- {category?.name}
                   </h1>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl border border-green-200/60 p-6 shadow-lg">
@@ -195,6 +197,38 @@ export default function SubcategoriesPage() {
                       </div>
                     </div>
                   </div>
+                  <div className="mt-4">
+                    {category?.liveUrl ? (
+                      <GoogleAnalyticsCard
+                        pageUrl={`https://www.pepagora.com/c/${category.liveUrl}`}
+                        pageType="category"
+                      />
+                    ) : (
+                      <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl border border-orange-200/60 p-6 shadow-lg">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-orange-500 rounded-xl">
+                            <svg
+                              className="w-6 h-6 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                              />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-orange-700">Google Analytics</p>
+                            <p className="text-sm text-orange-600 mt-1">No liveUrl configured for this category</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -211,6 +245,7 @@ export default function SubcategoriesPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
+                  <h1 className="text-2xl font-bold text-gray-900 m-2 text-center underline">Sub Categories</h1>
                   {subcategories.map((subcategory) => (
                     <button
                       key={subcategory._id}
@@ -219,7 +254,7 @@ export default function SubcategoriesPage() {
                           `/marketing/view-details/subcategories/${subcategory._id}/productcategories`
                         )
                       }
-                      className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group"
+                      className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 hover:cursor-pointer transition-all duration-200 group"
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-lg font-medium text-gray-900 group-hover:text-blue-600">

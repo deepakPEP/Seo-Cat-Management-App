@@ -1,7 +1,9 @@
 import {
   Controller,
   Get,
+  Post,
   Param,
+  Body,
   UseGuards,
   Res,
   HttpStatus,
@@ -10,13 +12,18 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { MarketingService } from './marketing.service';
+import { AnalyticsService } from './analytics.service';
+import { AnalyticsRequestDto } from './dto/analytics-request.dto';
 import { Response } from 'express';
 import * as ExcelJS from 'exceljs';
 
 @Controller('marketing')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class MarketingController {
-  constructor(private readonly marketingService: MarketingService) {}
+  constructor(
+    private readonly marketingService: MarketingService,
+    private readonly analyticsService: AnalyticsService,
+  ) {}
 
   // Dashboard counts
   @Get('dashboard/counts')
@@ -192,29 +199,34 @@ export class MarketingController {
       headerRow.fill = headerFill;
       headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
 
-      // Add data
-      hierarchy.forEach((item: any) => {
-        const row = worksheet.addRow([
-          item.category,
-          item.subcategory,
-          item.productCategory,
-          item.productCount,
-          item.sampleProducts,
-        ]);
+      // OPTIMIZATION: Add data in batches for better performance
+      // Process in chunks to avoid memory issues with large datasets
+      const BATCH_SIZE = 1000;
+      for (let i = 0; i < hierarchy.length; i += BATCH_SIZE) {
+        const batch = hierarchy.slice(i, i + BATCH_SIZE);
+        batch.forEach((item: any) => {
+          const row = worksheet.addRow([
+            item.category,
+            item.subcategory,
+            item.productCategory,
+            item.productCount,
+            item.sampleProducts,
+          ]);
 
-        // Style rows
-        const categoryCell = row.getCell(1);
-        if (item.category) {
-          categoryCell.font = categoryFont;
-          categoryCell.fill = categoryFill;
-        }
+          // Style rows
+          const categoryCell = row.getCell(1);
+          if (item.category) {
+            categoryCell.font = categoryFont;
+            categoryCell.fill = categoryFill;
+          }
 
-        const subcategoryCell = row.getCell(2);
-        if (item.subcategory) {
-          subcategoryCell.font = subcategoryFont;
-          subcategoryCell.fill = subcategoryFill;
-        }
-      });
+          const subcategoryCell = row.getCell(2);
+          if (item.subcategory) {
+            subcategoryCell.font = subcategoryFont;
+            subcategoryCell.fill = subcategoryFill;
+          }
+        });
+      }
 
       // Generate buffer
       const buffer = await workbook.xlsx.writeBuffer();
@@ -235,6 +247,49 @@ export class MarketingController {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Failed to generate Excel report',
       });
+    }
+  }
+
+  // Get Google Analytics data for a page
+  @Post('analytics')
+  @Roles('admin', 'category_manager', 'pepagora_manager', 'marketing_team')
+  async getAnalytics(@Body() dto: AnalyticsRequestDto) {
+    try {
+      const { startDate, endDate } = this.analyticsService.getDateRange(
+        dto.dateRange,
+        dto.customStartDate,
+        dto.customEndDate,
+      );
+
+      const pageViews = await this.analyticsService.getPageViews(
+        dto.pageUrl,
+        startDate,
+        endDate,
+      );
+
+      console.log('[Marketing Controller] Analytics response:', {
+        pageUrl: dto.pageUrl,
+        pageViews,
+        startDate,
+        endDate,
+      });
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Analytics data fetched successfully',
+        data: {
+          pageViews,
+          startDate,
+          endDate,
+          pageUrl: dto.pageUrl,
+        },
+      };
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: error.message || 'Failed to fetch analytics data',
+        data: null,
+      };
     }
   }
 }

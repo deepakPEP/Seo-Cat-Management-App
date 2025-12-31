@@ -172,7 +172,7 @@ export default function ViewDetailsPage() {
               <button
                 onClick={handleGenerateReport}
                 disabled={generatingReport}
-                className="p-2 m-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                className="p-2 m-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
                 {generatingReport ? (
                   <>
@@ -206,7 +206,7 @@ export default function ViewDetailsPage() {
                     <button
                       key={category._id}
                       onClick={() => router.push(`/marketing/view-details/categories/${category._id}/subcategories`)}
-                      className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group"
+                      className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 hover:cursor-pointer transition-all duration-200 group"
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-lg font-medium text-gray-900 group-hover:text-blue-600">

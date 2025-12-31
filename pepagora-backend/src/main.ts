@@ -76,9 +76,53 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT) || 8000;
   console.log('Starting server...', process.env.PORT);
-  const host = process.env.APP_HOST || '0.0.0.0';
-  const publicUrl = process.env.APP_PUBLIC_URL || `http://localhost:${port}`;
+  
+  // Auto-detect environment: use localhost for local dev, 0.0.0.0 for production
+  // If APP_HOST is explicitly set, use it; otherwise auto-detect
+  let host: string;
+  let publicUrl: string;
+  
+  // Debug: Log environment variables for troubleshooting
+  console.log('[Server] Environment check:', {
+    NODE_ENV: process.env.NODE_ENV,
+    DOCKER_ENV: process.env.DOCKER_ENV,
+    PRODUCTION: process.env.PRODUCTION,
+    APP_HOST: process.env.APP_HOST,
+    APP_PUBLIC_URL: process.env.APP_PUBLIC_URL,
+    FORCE_LOCALHOST: process.env.FORCE_LOCALHOST,
+  });
+  
+  // Check if localhost is explicitly forced (highest priority)
+  if (process.env.FORCE_LOCALHOST === 'true' || process.env.LOCAL_DEV === 'true') {
+    host = 'localhost';
+    publicUrl = `http://localhost:${port}`;
+    console.log('[Server] ✅ FORCE_LOCALHOST/LOCAL_DEV set - binding to localhost');
+  } else if (process.env.APP_HOST) {
+    // Use explicitly set host
+    host = process.env.APP_HOST;
+    publicUrl = process.env.APP_PUBLIC_URL || `http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`;
+    console.log('[Server] Using explicitly set APP_HOST:', host);
+  } else {
+    // Auto-detect: check NODE_ENV or if we're in a container/production environment
+    // Default to development (localhost) unless explicitly in production
+    const isProduction = process.env.NODE_ENV === 'production' || 
+                         process.env.DOCKER_ENV === 'true' ||
+                         process.env.PRODUCTION === 'true';
+    
+    if (isProduction) {
+      host = '0.0.0.0'; // Bind to all interfaces in production
+      publicUrl = process.env.APP_PUBLIC_URL || `http://13.234.126.192:${port}`;
+      console.log('[Server] ⚠️ Production mode detected, binding to 0.0.0.0');
+      console.log('[Server] ⚠️ To force localhost, set FORCE_LOCALHOST=true or LOCAL_DEV=true');
+    } else {
+      host = 'localhost'; // Bind only to localhost in development (default)
+      publicUrl = `http://localhost:${port}`;
+      console.log('[Server] ✅ Development mode - binding to localhost');
+    }
+  }
+  
   await app.listen(port, host);
   console.log(`🚀 Server running on ${publicUrl}`);
+  console.log(`📡 Listening on ${host}:${port}`);
 }
 void bootstrap();
