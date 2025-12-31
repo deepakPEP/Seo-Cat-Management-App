@@ -136,10 +136,8 @@ export default function HierarchicalFilterSidebar({ onFilterChange, currentSelec
   const fetchProductCategories = async (subcategoryId: string) => {
     setLoading(prev => ({ ...prev, products: true }));
     try {
-      console.log('Fetching product categories for subcategory:', subcategoryId);
       // Use marketing-style hierarchical endpoint
       const res = await axiosInstance.get(`/subcategories/${subcategoryId}/productcategories`);
-      console.log('Product categories response:', res.data);
       
       // Handle response with interceptor wrapping
       let data = [];
@@ -151,8 +149,6 @@ export default function HierarchicalFilterSidebar({ onFilterChange, currentSelec
         data = res.data; // No wrapper
       }
       
-      console.log('Parsed product categories:', data);
-      console.log('Product categories count:', data.length);
       setProductCategories(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching product categories:', error);

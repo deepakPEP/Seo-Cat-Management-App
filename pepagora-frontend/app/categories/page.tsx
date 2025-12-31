@@ -404,7 +404,6 @@ export default function CategoriesPage() {
       });
       const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
       setCategories(data);
-      console.log(data);
       setTotalPages(res.data.data.pagination.totalPages || 1);
     } catch (err) {
       console.error('Error fetching categories:', err);

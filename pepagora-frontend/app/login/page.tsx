@@ -28,7 +28,6 @@ export default function LoginPage() {
       });
 
       const { accessToken, user } = res.data.data;
-      console.log(user)
       saveToken(accessToken, user.id, user.role);
       localStorage.setItem('accessToken', accessToken);
       const name = user?.username;

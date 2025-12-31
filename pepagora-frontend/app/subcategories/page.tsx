@@ -265,7 +265,6 @@ export default function SubcategoriesPage() {
         params: { page: pageToFetch, limit, search: searchQuery || undefined },
       });
       const items = Array.isArray(res.data.data.data) ? res.data.data.data : [];
-      console.log(items)
       const pagination = res.data.data.pagination || {};
       setSubcategories(items);
       setTotalPages(pagination.totalPages || 1);

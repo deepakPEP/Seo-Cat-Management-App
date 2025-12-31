@@ -487,7 +487,6 @@ useEffect(()=>{
       if (metaDescriptionMatch) updatedData.metaDescription = metaDescriptionMatch[1].trim();
 
       // Update the product with generated meta data
-      console.log('Updating product with data:', updatedData);
       const updateResponse = await axiosInstance.patch(`/productcategories/${item._id}`, updatedData);
       
       if (updateResponse.status !== 200) {

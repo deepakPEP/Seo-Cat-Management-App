@@ -1,13 +1,12 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BetaAnalyticsDataClient } from '@google-analytics/data';
-import * as path from 'path';
-import * as fs from 'fs';
 
 @Injectable()
 export class AnalyticsService {
   private analyticsDataClient: BetaAnalyticsDataClient | null = null;
   private propertyId: string;
+  private credentials: any = null;
 
   constructor(private configService: ConfigService) {
     const propertyId = this.configService.get<string>('GA_PROPERTY_ID');
@@ -18,68 +17,71 @@ export class AnalyticsService {
     
     this.propertyId = propertyId || '';
     
-    // Setup credentials path
-    this.setupCredentialsPath();
+    // Setup credentials from environment variable
+    this.setupCredentials();
     
     // Initialize client lazily to avoid authentication errors on startup
     // The client will be created when first needed
   }
 
   /**
-   * Setup Google Application Credentials path
-   * Resolves relative paths to absolute paths
+   * Setup Google Application Credentials from GA_APPLICATIONS_CREDENTIALS environment variable
+   * The value should be a JSON string containing the service account credentials
    */
-  private setupCredentialsPath() {
-    // Check if GOOGLE_APPLICATION_CREDENTIALS is already set
-    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  private setupCredentials() {
+    const credentialsString = this.configService.get<string>('GA_APPLICATIONS_CREDENTIALS');
+    
+    if (!credentialsString) {
+      console.warn('[Analytics Service] GA_APPLICATIONS_CREDENTIALS not set in environment variables. Analytics will not work.');
+      return;
+    }
+
+    try {
+      // Parse the JSON string from environment variable
+      this.credentials = JSON.parse(credentialsString);
       
-      // If it's a relative path, resolve it to absolute
-      if (!path.isAbsolute(credentialsPath)) {
-        const absolutePath = path.resolve(process.cwd(), credentialsPath);
-        if (fs.existsSync(absolutePath)) {
-          process.env.GOOGLE_APPLICATION_CREDENTIALS = absolutePath;
-          console.log('[Analytics Service] Resolved credentials path to:', absolutePath);
-        } else {
-          console.warn('[Analytics Service] Credentials file not found at:', absolutePath);
-        }
-      }
-    } else {
-      // Try to find GA_Credentials.json in common locations
-      const possiblePaths = [
-        path.join(process.cwd(), 'GA_Credentials.json'),
-        path.join(process.cwd(), 'pepagora-backend', 'GA_Credentials.json'),
-        path.join(__dirname, '..', '..', 'GA_Credentials.json'),
-      ];
-
-      for (const credPath of possiblePaths) {
-        if (fs.existsSync(credPath)) {
-          process.env.GOOGLE_APPLICATION_CREDENTIALS = credPath;
-          console.log('[Analytics Service] Found credentials file at:', credPath);
-          break;
-        }
+      // Verify it's a service account credentials object
+      if (this.credentials.type !== 'service_account') {
+        console.warn('[Analytics Service] GA_APPLICATIONS_CREDENTIALS does not contain a service account (type: "service_account")');
+        this.credentials = null;
+        return;
       }
 
-      if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        console.warn('[Analytics Service] GOOGLE_APPLICATION_CREDENTIALS not set and credentials file not found in common locations');
-      }
+      console.log('[Analytics Service] Successfully loaded credentials from GA_APPLICATIONS_CREDENTIALS environment variable');
+      console.log('[Analytics Service] Service account email:', this.credentials.client_email);
+    } catch (parseError: any) {
+      console.error('[Analytics Service] Failed to parse GA_APPLICATIONS_CREDENTIALS:', parseError.message);
+      console.error('[Analytics Service] Ensure GA_APPLICATIONS_CREDENTIALS is a valid JSON string');
+      this.credentials = null;
     }
   }
 
   /**
    * Get or create the analytics client
    * This is done lazily to avoid authentication errors on service initialization
+   * Explicitly loads service account credentials from GA_APPLICATIONS_CREDENTIALS to avoid OAuth 2.0 flow
    */
   private getAnalyticsClient(): BetaAnalyticsDataClient {
     if (!this.analyticsDataClient) {
       try {
+        // Ensure credentials are loaded
+        if (!this.credentials) {
+          throw new Error('Google Analytics credentials not found. Please set GA_APPLICATIONS_CREDENTIALS environment variable with a valid service account JSON string.');
+        }
+
         // Initialize Google Analytics Data API client
-        // The client will use Application Default Credentials (ADC)
-        // Make sure GOOGLE_APPLICATION_CREDENTIALS env var is set or credentials are available
-        this.analyticsDataClient = new BetaAnalyticsDataClient();
-      } catch (error) {
+        // Explicitly pass credentials to ensure service account authentication
+        // This prevents the client from trying to use OAuth 2.0 user flow
+        this.analyticsDataClient = new BetaAnalyticsDataClient({
+          credentials: this.credentials,
+        });
+
+        console.log('[Analytics Service] Google Analytics client initialized with service account credentials from GA_APPLICATIONS_CREDENTIALS');
+      } catch (error: any) {
         console.error('[Analytics Service] Failed to initialize Google Analytics client:', error);
-        throw new BadRequestException('Google Analytics client initialization failed. Please check GOOGLE_APPLICATION_CREDENTIALS environment variable.');
+        throw new BadRequestException(
+          `Google Analytics client initialization failed: ${error.message}. Please check GA_APPLICATIONS_CREDENTIALS environment variable and ensure the service account has proper permissions.`
+        );
       }
     }
     return this.analyticsDataClient;

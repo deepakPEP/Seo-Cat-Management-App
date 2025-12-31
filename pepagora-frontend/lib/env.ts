@@ -21,24 +21,15 @@ const isLocalHostname =
 if (isNextDev || isLocalHostname) {
   // Force localhost in development mode (even if env var is set)
   rawBaseUrl = 'http://localhost:8000';
-  if (envApiBaseUrl && envApiBaseUrl.includes('13.234.126.192')) {
-    console.log('[env] ⚠️ Overriding production URL to localhost for development');
-  }
-  console.log('[env] ✅ Development mode - using localhost:8000');
 } else if (envApiBaseUrl && typeof envApiBaseUrl === 'string' && envApiBaseUrl.trim() !== '') {
   // Use explicitly set environment variable in production
   rawBaseUrl = envApiBaseUrl.trim();
-  console.log('[env] Using explicitly set NEXT_PUBLIC_API_BASE_URL:', rawBaseUrl);
 } else {
   // Production deployment - use production URL
   rawBaseUrl = 'http://13.234.126.192:8000';
-  console.log('[env] Production mode detected, using http://13.234.126.192:8000');
 }
 
 export const API_BASE_URL = normalizeBaseUrl(rawBaseUrl);
-
-// Debug: Log the final API base URL being used
-console.log('[env] ✅ Final API_BASE_URL:', API_BASE_URL);
 
 export const buildApiUrl = (path: string = '') => {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
