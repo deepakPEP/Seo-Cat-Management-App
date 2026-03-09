@@ -30,14 +30,26 @@ async function bootstrap() {
     process.env.FRONTEND_URL_LOCALHOST || `http://localhost:${frontendPort}`,
     process.env.FRONTEND_URL_127 || `http://127.0.0.1:${frontendPort}`,
     process.env.FRONTEND_URL, // Production URL from env (required in production)
-  ].filter(Boolean); // Remove undefined values
+  ]
+    .filter((url): url is string => Boolean(url)) // Remove undefined values with type guard
+    .map(url => url.replace(/\/+$/, '')); // Normalize: remove trailing slashes
 
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or Postman)
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      
+      // Normalize origin by removing trailing slash for comparison
+      const normalizedOrigin = origin.replace(/\/+$/, '');
+      
+      if (allowedOrigins.includes(normalizedOrigin)) {
         callback(null, true);
       } else {
+        console.warn(`[CORS] Rejected origin: ${origin} (normalized: ${normalizedOrigin})`);
+        console.warn(`[CORS] Allowed origins:`, allowedOrigins);
         callback(new Error(`CORS not allowed for origin: ${origin}`));
       }
     },
