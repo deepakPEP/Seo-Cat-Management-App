@@ -1,10 +1,11 @@
-FROM node:18-alpine
+FROM node:18
 
 # Set working directory
 WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package*.json ./
+RUN rm -f package-lock.json
 RUN npm install
 
 # Copy application source
@@ -21,3 +22,4 @@ EXPOSE 7000
 
 # Start Next.js in production mode
 CMD ["npm", "start"]
+
