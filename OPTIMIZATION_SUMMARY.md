@@ -6,7 +6,7 @@
 
 **Before:** 
 - Made 2 separate database queries for EACH product category (one for count, one for products)
-- For 1000 product categories = 2000+ database queries
+- For 1000 product categories  = 2000+ database queries
 - Sequential processing in nested loops
 
 **After:**
