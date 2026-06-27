@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+category_wise_acct.py
+category_wise_accts.xlsx
+

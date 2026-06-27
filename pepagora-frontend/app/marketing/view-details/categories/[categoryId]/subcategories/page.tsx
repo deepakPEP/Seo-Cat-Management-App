@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import axiosInstance from "../../../../../../lib/axiosInstance";
 import { useAuth } from "@/components/hooks/useAuth";
 import GoogleAnalyticsCard from "@/components/GoogleAnalyticsCard";
+import AnalyticsBreadcrumb from "@/components/analytics/AnalyticsBreadcrumb";
+import AnalyticsErrorBoundary from "@/components/analytics/AnalyticsErrorBoundary";
+import InlineTierPills from "@/components/analytics/InlineTierPills";
+import { SkeletonPanel, SkeletonTop5 } from "@/components/analytics/AnalyticsSkeleton";
+import { useListCounts } from "@/components/hooks/useListCounts";
+import type { Top5Level } from "@/lib/analytics/types";
+
+const TierBreakdownPanel = lazy(() => import("@/components/analytics/TierBreakdownPanel"));
+const Top5Widget = lazy(() => import("@/components/analytics/Top5Widget"));
 
 type Subcategory = {
   _id: string;
@@ -19,10 +28,20 @@ type Category = {
 };
 
 export default function SubcategoriesPage() {
-  const { userRole, loading: authLoading } = useAuth();
+  const { loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
   const categoryId = params.categoryId as string;
+  const { dataMap } = useListCounts("subcategory", categoryId);
+
+  const handleTop5Click = useCallback(
+    (nodeId: string, level: Top5Level) => {
+      if (level === "subcategory") {
+        router.push(`/marketing/view-details/subcategories/${nodeId}/productcategories`);
+      }
+    },
+    [router],
+  );
 
   const [collapsed, setCollapsed] = useState(false);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
@@ -97,18 +116,12 @@ export default function SubcategoriesPage() {
         <div className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="py-6">
-              <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                <button
-                  onClick={() => router.push("/marketing/view-details")}
-                  className="hover:text-blue-600"
-                >
-                  Categories
-                </button>
-                <span>/</span>
-                <span className="text-gray-900">
-                  {category?.name || "Category"}
-                </span>
-              </div>
+              <AnalyticsBreadcrumb
+                segments={[
+                  { label: "Categories", href: "/marketing/view-details" },
+                  { label: category?.name || "Category" },
+                ]}
+              />
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900 m-2">
@@ -235,6 +248,27 @@ export default function SubcategoriesPage() {
           </div>
         </div>
 
+        {/* Analytics */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+          <AnalyticsErrorBoundary>
+            <Suspense fallback={<SkeletonPanel />}>
+              <TierBreakdownPanel
+                nodeType="category"
+                nodeId={categoryId}
+                title={`Client & Product Breakdown — ${category?.name ?? ""}`}
+              />
+            </Suspense>
+            <Suspense fallback={<SkeletonTop5 />}>
+              <Top5Widget
+                level="subcategory"
+                parentId={categoryId}
+                title="Top 5 SubCategories"
+                onRowClick={handleTop5Click}
+              />
+            </Suspense>
+          </AnalyticsErrorBoundary>
+        </div>
+
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -246,7 +280,9 @@ export default function SubcategoriesPage() {
               ) : (
                 <div className="space-y-2">
                   <h1 className="text-2xl font-bold text-gray-900 m-2 text-center underline">Sub Categories</h1>
-                  {subcategories.map((subcategory) => (
+                  {subcategories.map((subcategory) => {
+                    const stats = dataMap.get(subcategory._id);
+                    return (
                     <button
                       key={subcategory._id}
                       onClick={() =>
@@ -256,10 +292,17 @@ export default function SubcategoriesPage() {
                       }
                       className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 hover:cursor-pointer transition-all duration-200 group"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-4">
                         <span className="text-lg font-medium text-gray-900 group-hover:text-blue-600">
                           {subcategory.name}
                         </span>
+                        <div className="flex items-center gap-3">
+                          {stats && (
+                            <InlineTierPills
+                              paid={stats.paidClients}
+                              free={stats.freeClients}
+                            />
+                          )}
                         <svg
                           className="w-5 h-5 text-gray-400 group-hover:text-blue-600"
                           fill="none"
@@ -273,9 +316,11 @@ export default function SubcategoriesPage() {
                             d="M9 5l7 7-7 7"
                           />
                         </svg>
+                        </div>
                       </div>
                     </button>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
             </div>

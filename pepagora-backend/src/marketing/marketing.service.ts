@@ -32,8 +32,9 @@ type LiveProductDocument = {
   _id: ObjectId;
   productName?: string;
   liveUrl?: string;
+  status?: string;
   productCategory?: {
-    _id?: ObjectId;
+    _id?: ObjectId | string;
   };
 };
 
@@ -84,6 +85,66 @@ export class MarketingService {
     return productCategory.name ?? productCategory.product_category_name ?? 'Unnamed Product Category';
   }
 
+  /** parentId may be stored as ObjectId or string in productcategories. */
+  private parentIdFilter(parentId: ObjectId) {
+    const str = parentId.toString();
+    return { $or: [{ parentId }, { parentId: str }] };
+  }
+
+  private parentIdInFilter(parentIds: ObjectId[]) {
+    const variants = parentIds.flatMap((id) => [id, id.toString()]);
+    return { parentId: { $in: variants } };
+  }
+
+  private expandIdVariants(ids: ObjectId[]): (ObjectId | string)[] {
+    return ids.flatMap((id) => [id, id.toString()]);
+  }
+
+  /** Live products only; productCategory._id may be ObjectId or string. */
+  private liveProductCategoryFilter(productCategoryIds: ObjectId[]) {
+    return {
+      status: 'live',
+      'productCategory._id': { $in: this.expandIdVariants(productCategoryIds) },
+    };
+  }
+
+  private matchSingleProductCategoryId(productCategoryId: ObjectId) {
+    const str = productCategoryId.toString();
+    return {
+      status: 'live',
+      $or: [{ 'productCategory._id': productCategoryId }, { 'productCategory._id': str }],
+    };
+  }
+
+  private async aggregateLiveProductCountsByCategory(productCategoryIds: ObjectId[]) {
+    const liveProductsCollection = this.metaDb.collection<LiveProductDocument>('liveproducts');
+    const counts = new Map<string, number>();
+    const samples = new Map<string, string>();
+    if (productCategoryIds.length === 0) return { counts, samples };
+
+    const rows = await liveProductsCollection
+      .aggregate<{ _id: string; count: number; sampleProducts?: string[] }>([
+        { $match: this.liveProductCategoryFilter(productCategoryIds) },
+        { $addFields: { _pcId: { $toString: '$productCategory._id' } } },
+        {
+          $group: {
+            _id: '$_pcId',
+            count: { $sum: 1 },
+            sampleProducts: { $push: { $ifNull: ['$productName', 'Unnamed Product'] } },
+          },
+        },
+      ])
+      .toArray();
+
+    for (const row of rows) {
+      counts.set(row._id, row.count);
+      if (row.sampleProducts) {
+        samples.set(row._id, row.sampleProducts.slice(0, 5).join(', '));
+      }
+    }
+    return { counts, samples };
+  }
+
   // Get counts for dashboard
   async getProductCategoryCount(): Promise<number> {
     try {
@@ -97,7 +158,7 @@ export class MarketingService {
   async getLiveProductsCount(): Promise<number> {
     try {
       const liveProductsCollection = this.metaDb.collection<LiveProductDocument>('liveproducts');
-      return await liveProductsCollection.countDocuments();
+      return await liveProductsCollection.countDocuments({ status: 'live' });
     } catch (error) {
       throw new BadRequestException('Failed to fetch live products count');
     }
@@ -113,7 +174,7 @@ export class MarketingService {
       const [subcategoriesCount, productCategoriesCount, productsCount] = await Promise.all([
         subcategoriesCollection.countDocuments(),
         productCategoriesCollection.countDocuments(),
-        liveProductsCollection.countDocuments(),
+        liveProductsCollection.countDocuments({ status: 'live' }),
       ]);
 
       return {
@@ -151,18 +212,15 @@ export class MarketingService {
 
       // Get all product categories for these subcategories
       const productCategories = subcategoryObjectIds.length
-        ? await productCategoriesCollection
-            .find({ parentId: { $in: subcategoryObjectIds } })
-            .toArray()
+        ? await productCategoriesCollection.find(this.parentIdInFilter(subcategoryObjectIds)).toArray()
         : [];
 
       const productCategoryObjectIds = productCategories.map((pc) => pc._id);
 
-      // Get product count for these product categories
       const productsCount = productCategoryObjectIds.length
-        ? await liveProductsCollection.countDocuments({
-            'productCategory._id': { $in: productCategoryObjectIds },
-          })
+        ? await liveProductsCollection.countDocuments(
+            this.liveProductCategoryFilter(productCategoryObjectIds),
+          )
         : 0;
 
       return {
@@ -189,16 +247,15 @@ export class MarketingService {
 
       // Get all product categories for this subcategory
       const productCategories = await productCategoriesCollection
-        .find({ parentId: subcategoryObjectId })
+        .find(this.parentIdFilter(subcategoryObjectId))
         .toArray();
 
       const productCategoryObjectIds = productCategories.map((pc) => pc._id);
 
-      // Get product count for these product categories
       const productsCount = productCategoryObjectIds.length
-        ? await liveProductsCollection.countDocuments({
-            'productCategory._id': { $in: productCategoryObjectIds },
-          })
+        ? await liveProductsCollection.countDocuments(
+            this.liveProductCategoryFilter(productCategoryObjectIds),
+          )
         : 0;
 
       return {
@@ -292,7 +349,7 @@ export class MarketingService {
       if (!subcategory) throw new BadRequestException('Subcategory not found');
 
       const productCategories = await productCategoriesCollection
-        .find({ parentId: subcategoryObjectId }, { projection: { name: 1 } })
+        .find(this.parentIdFilter(subcategoryObjectId), { projection: { name: 1 } })
         .sort({ name: 1 })
         .toArray();
 
@@ -300,33 +357,8 @@ export class MarketingService {
         mappedChildren: { $in: [subcategory._id.toString()] },
       });
 
-      // OPTIMIZATION: Batch query for product counts using aggregation pipeline
       const productCategoryIds = productCategories.map((pc) => pc._id);
-      const productCountsMap = new Map<string, number>();
-
-      if (productCategoryIds.length > 0) {
-        // Get all product counts in one aggregation query instead of N queries
-        const productCountsAggregation = await liveProductsCollection
-          .aggregate([
-            {
-              $match: {
-                'productCategory._id': { $in: productCategoryIds },
-              },
-            },
-            {
-              $group: {
-                _id: '$productCategory._id',
-                count: { $sum: 1 },
-              },
-            },
-          ])
-          .toArray();
-
-        // Create a map for O(1) lookup
-        for (const result of productCountsAggregation) {
-          productCountsMap.set(result._id.toString(), result.count);
-        }
-      }
+      const { counts: productCountsMap } = await this.aggregateLiveProductCountsByCategory(productCategoryIds);
 
       // Map product categories with pre-fetched counts
       const productCategoriesWithCounts = productCategories.map((pc) => {
@@ -388,10 +420,9 @@ export class MarketingService {
         : null;
 
       const products = await liveProductsCollection
-        .find(
-          { 'productCategory._id': productCategoryObjectId },
-          { projection: { productName: 1, liveUrl: 1 } },
-        )
+        .find(this.matchSingleProductCategoryId(productCategoryObjectId), {
+          projection: { productName: 1, liveUrl: 1 },
+        })
         .sort({ productName: 1 })
         .toArray();
 
@@ -473,40 +504,8 @@ export class MarketingService {
         }
       }
 
-      // OPTIMIZATION: Batch query for product counts using aggregation pipeline
-      const productCountsMap = new Map<string, number>();
-      const sampleProductsMap = new Map<string, string>();
-
-      if (allProductCategoryIds.length > 0) {
-        // Get product counts for all product categories in one query
-        const productCountsAggregation = await liveProductsCollection
-          .aggregate([
-            {
-              $match: {
-                'productCategory._id': { $in: allProductCategoryIds },
-              },
-            },
-            {
-              $group: {
-                _id: '$productCategory._id',
-                count: { $sum: 1 },
-                sampleProducts: {
-                  $push: { $ifNull: ['$productName', 'Unnamed Product'] },
-                },
-              },
-            },
-          ])
-          .toArray();
-
-        // Process aggregation results
-        for (const result of productCountsAggregation) {
-          const productCategoryId = result._id.toString();
-          productCountsMap.set(productCategoryId, result.count);
-          // Get first 5 product names as samples
-          const samples = result.sampleProducts.slice(0, 5);
-          sampleProductsMap.set(productCategoryId, samples.join(', '));
-        }
-      }
+      const { counts: productCountsMap, samples: sampleProductsMap } =
+        await this.aggregateLiveProductCountsByCategory(allProductCategoryIds);
 
       // Build hierarchy with pre-fetched data
       const hierarchy: any[] = [];

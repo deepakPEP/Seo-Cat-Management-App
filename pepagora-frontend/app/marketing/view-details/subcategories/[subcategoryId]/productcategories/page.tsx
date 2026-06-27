@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import axiosInstance from "../../../../../../lib/axiosInstance";
 import { useAuth } from "@/components/hooks/useAuth";
 import GoogleAnalyticsCard from "@/components/GoogleAnalyticsCard";
+import AnalyticsBreadcrumb from "@/components/analytics/AnalyticsBreadcrumb";
+import AnalyticsErrorBoundary from "@/components/analytics/AnalyticsErrorBoundary";
+import InlineTierPills from "@/components/analytics/InlineTierPills";
+import { SkeletonPanel, SkeletonTop5 } from "@/components/analytics/AnalyticsSkeleton";
+import { useListCounts } from "@/components/hooks/useListCounts";
+import type { Top5Level } from "@/lib/analytics/types";
+
+const TierBreakdownPanel = lazy(() => import("@/components/analytics/TierBreakdownPanel"));
+const Top5Widget = lazy(() => import("@/components/analytics/Top5Widget"));
 
 type ProductCategory = {
   _id: string;
@@ -25,10 +34,20 @@ type Category = {
 };
 
 export default function ProductCategoriesPage() {
-  const { userRole, loading: authLoading } = useAuth();
+  const { loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
   const subcategoryId = params.subcategoryId as string;
+  const { dataMap } = useListCounts("product_category", subcategoryId);
+
+  const handleTop5Click = useCallback(
+    (nodeId: string, level: Top5Level) => {
+      if (level === "product_category") {
+        router.push(`/marketing/view-details/productcategories/${nodeId}/products`);
+      }
+    },
+    [router],
+  );
 
   const [collapsed, setCollapsed] = useState(false);
   const [productCategories, setProductCategories] = useState<ProductCategory[]>(
@@ -103,6 +122,19 @@ export default function ProductCategoriesPage() {
   const path =
     category && subcategory ? `${category.name}/${subcategory.name}/` : "";
 
+  const breadcrumbSegments = [
+    { label: "Categories", href: "/marketing/view-details" },
+    ...(category
+      ? [
+          {
+            label: category.name,
+            href: `/marketing/view-details/categories/${category._id}/subcategories`,
+          },
+        ]
+      : []),
+    ...(subcategory ? [{ label: subcategory.name }] : []),
+  ];
+
   return (
     <>
       <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
@@ -115,35 +147,7 @@ export default function ProductCategoriesPage() {
         <div className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="py-6">
-              <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                <button
-                  onClick={() => router.push("/marketing/view-details")}
-                  className="hover:text-blue-600"
-                >
-                  Categories
-                </button>
-                {category && (
-                  <>
-                    <span>/</span>
-                    <button
-                      onClick={() =>
-                        router.push(
-                          `/marketing/view-details/categories/${category._id}/subcategories`
-                        )
-                      }
-                      className="hover:text-blue-600"
-                    >
-                      {category.name}
-                    </button>
-                  </>
-                )}
-                {subcategory && (
-                  <>
-                    <span>/</span>
-                    <span className="text-gray-900">{subcategory.name}</span>
-                  </>
-                )}
-              </div>
+              <AnalyticsBreadcrumb segments={breadcrumbSegments} />
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900 m-2">
@@ -243,6 +247,26 @@ export default function ProductCategoriesPage() {
           </div>
         </div>
 
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+          <AnalyticsErrorBoundary>
+            <Suspense fallback={<SkeletonPanel />}>
+              <TierBreakdownPanel
+                nodeType="subcategory"
+                nodeId={subcategoryId}
+                title={`Client & Product Breakdown — ${subcategory?.name ?? ""}`}
+              />
+            </Suspense>
+            <Suspense fallback={<SkeletonTop5 />}>
+              <Top5Widget
+                level="product_category"
+                parentId={subcategoryId}
+                title="Top 5 Product Categories"
+                onRowClick={handleTop5Click}
+              />
+            </Suspense>
+          </AnalyticsErrorBoundary>
+        </div>
+
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -271,7 +295,7 @@ export default function ProductCategoriesPage() {
                         }`}
                         disabled={hasZeroProducts}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-4">
                           <span className={`text-lg font-medium ${
                             hasZeroProducts 
                               ? 'text-red-900 group-hover:text-red-700 hover:cursor-not-allowed' 
@@ -279,6 +303,13 @@ export default function ProductCategoriesPage() {
                           }`}>
                             {productCategory.name}
                           </span>
+                          <div className="flex items-center gap-3">
+                            {(() => {
+                              const stats = dataMap.get(productCategory._id);
+                              return stats ? (
+                                <InlineTierPills paid={stats.paidClients} free={stats.freeClients} />
+                              ) : null;
+                            })()}
                           <svg
                             className={`w-5 h-5 ${
                               hasZeroProducts 
@@ -296,6 +327,7 @@ export default function ProductCategoriesPage() {
                               d="M9 5l7 7-7 7"
                             />
                           </svg>
+                          </div>
                         </div>
                       </button>
                     );
