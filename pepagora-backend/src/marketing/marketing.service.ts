@@ -38,6 +38,26 @@ type LiveProductDocument = {
   };
 };
 
+type BusinessProfileAccountDoc = {
+  _id: ObjectId;
+  createdBy?: ObjectId | string;
+  productCategories?: { _id?: ObjectId | string }[];
+};
+
+type UserPlanDoc = {
+  _id: ObjectId | string;
+  currentPlan?: { planNo?: number };
+};
+
+export type CategoryAccountRow = {
+  category: string;
+  subCategory: string;
+  productCategory: string;
+  freeAccounts: number;
+  paidAccounts: number;
+  totalAccounts: number;
+};
+
 @Injectable()
 export class MarketingService {
   private readonly metaDb: Db;
@@ -573,6 +593,135 @@ export class MarketingService {
     } catch (error) {
       console.error('[Marketing Service] Error generating Excel report:', error);
       throw new BadRequestException('Failed to generate report');
+    }
+  }
+
+  /**
+   * Category-wise accounts report (port of category_wise_Acct.py).
+   *
+   * For every product category, counts the distinct businesses (by createdBy)
+   * split into Free vs Paid using users.currentPlan.planNo (planNo === 1 → Free,
+   * planNo > 1 → Paid). Resolves the SubCategory and Category names via parentId.
+   */
+  async generateCategoryAccountsReportData(): Promise<CategoryAccountRow[]> {
+    try {
+      const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
+      const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
+      const productCategoriesCollection =
+        this.metaDb.collection<ProductCategoryDocument>('productcategories');
+      const businessProfilesCollection =
+        this.metaDb.collection<BusinessProfileAccountDoc>('businessprofiles');
+      const usersCollection = this.metaDb.collection<UserPlanDoc>('users');
+
+      // 1) categoryId -> name
+      const categories = await categoriesCollection
+        .find({}, { projection: { name: 1, main_cat_name: 1 } })
+        .toArray();
+      const categoryNameById = new Map<string, string>();
+      for (const cat of categories) {
+        categoryNameById.set(cat._id.toString(), this.getCategoryName(cat));
+      }
+
+      // 2) subCategoryId -> { name, parentId }
+      const subcategories = await subcategoriesCollection
+        .find({}, { projection: { name: 1, sub_cat_name: 1, parentId: 1 } })
+        .toArray();
+      const subcatById = new Map<string, { name: string; parentId: string | null }>();
+      for (const sub of subcategories) {
+        subcatById.set(sub._id.toString(), {
+          name: this.getSubcategoryName(sub),
+          parentId: sub.parentId != null ? sub.parentId.toString() : null,
+        });
+      }
+
+      // 3) product categories (stable order by _id, like the Python script)
+      const productCategories = await productCategoriesCollection
+        .find({}, { projection: { name: 1, product_category_name: 1, parentId: 1 } })
+        .sort({ _id: 1 })
+        .toArray();
+
+      // 4) productCategoryId -> Set<createdBy> (distinct businesses per product category)
+      const pcUsers = new Map<string, Set<string>>();
+      const bpCursor = businessProfilesCollection.find(
+        {},
+        { projection: { createdBy: 1, productCategories: 1 } },
+      );
+      for await (const bp of bpCursor) {
+        const createdBy = bp.createdBy;
+        if (!createdBy) continue;
+        const createdByStr = createdBy.toString();
+        const pcs = Array.isArray(bp.productCategories) ? bp.productCategories : [];
+        for (const pc of pcs) {
+          const pcId = pc?._id != null ? pc._id.toString() : null;
+          if (!pcId) continue;
+          let set = pcUsers.get(pcId);
+          if (!set) {
+            set = new Set<string>();
+            pcUsers.set(pcId, set);
+          }
+          set.add(createdByStr);
+        }
+      }
+
+      // 5) gather all referenced user ids
+      const allUserIds = new Set<string>();
+      for (const set of pcUsers.values()) {
+        for (const id of set) allUserIds.add(id);
+      }
+
+      // 6) userId -> planNo (handle _id stored as ObjectId or string)
+      const planNoByUser = new Map<string, number>();
+      if (allUserIds.size > 0) {
+        const idVariants: (ObjectId | string)[] = [];
+        for (const id of allUserIds) {
+          idVariants.push(id);
+          const oid = this.toObjectId(id);
+          if (oid) idVariants.push(oid);
+        }
+        const usersCursor = usersCollection.find(
+          { _id: { $in: idVariants } },
+          { projection: { 'currentPlan.planNo': 1 } },
+        );
+        for await (const user of usersCursor) {
+          planNoByUser.set(user._id.toString(), user.currentPlan?.planNo ?? 1);
+        }
+      }
+
+      // 7) assemble rows
+      const rows: CategoryAccountRow[] = [];
+      for (const pc of productCategories) {
+        const pcId = pc._id.toString();
+        const usersForPc = pcUsers.get(pcId);
+
+        let free = 0;
+        let paid = 0;
+        if (usersForPc) {
+          for (const userId of usersForPc) {
+            if (!planNoByUser.has(userId)) continue; // user record missing — skip (matches script)
+            const planNo = planNoByUser.get(userId) ?? 1;
+            if (planNo > 1) paid++;
+            else free++;
+          }
+        }
+
+        const sub = pc.parentId != null ? subcatById.get(pc.parentId.toString()) : undefined;
+        const subCategoryName = sub?.name ?? '';
+        const categoryName = sub?.parentId ? categoryNameById.get(sub.parentId) ?? '' : '';
+
+        rows.push({
+          category: categoryName,
+          subCategory: subCategoryName,
+          productCategory: this.getProductCategoryName(pc),
+          freeAccounts: free,
+          paidAccounts: paid,
+          totalAccounts: free + paid,
+        });
+      }
+
+      return rows;
+    } catch (error) {
+      console.error('[Marketing Service] Error generating category accounts report:', error);
+      throw new BadRequestException('Failed to generate category accounts report');
     }
   }
 }

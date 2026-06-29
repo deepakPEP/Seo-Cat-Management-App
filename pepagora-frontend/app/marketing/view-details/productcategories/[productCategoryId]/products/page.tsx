@@ -228,44 +228,6 @@ export default function ProductsPage() {
             </Suspense>
           </AnalyticsErrorBoundary>
         </div>
-
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-            <div className="p-6">
-              {products.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-gray-500">No products found</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <h1 className="text-2xl font-bold text-gray-900 m-2 text-center underline">Products</h1>
-                  {products.map((product) => (
-                    <div
-                      key={product._id}
-                      className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 hover:cursor-pointer transition-all duration-200"
-                    >
-                      {product.liveUrl ? (
-                        <a 
-                          href={`https://www.pepagora.com/en/p/${product.liveUrl}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-lg font-medium text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {product.productName}
-                        </a>
-                      ) : (
-                        <span className="text-lg font-medium text-gray-900">
-                          {product.productName}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
     </>
   );

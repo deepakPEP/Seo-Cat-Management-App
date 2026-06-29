@@ -44,6 +44,7 @@ export default function ViewDetailsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [generatingAccountsReport, setGeneratingAccountsReport] = useState(false);
   const [subcategoriesCount, setSubcategoriesCount] = useState(0);
   const [productCategoriesCount, setProductCategoriesCount] = useState(0);
   const [productsCount, setProductsCount] = useState(0);
@@ -117,6 +118,40 @@ export default function ViewDetailsPage() {
     }
   };
 
+  const handleGenerateAccountsReport = async () => {
+    toast.info('Crunching account numbers across every product category. This can take a moment.', {
+      position: 'top-right',
+      autoClose: 5000,
+    });
+
+    setGeneratingAccountsReport(true);
+    try {
+      const response = await axiosInstance.get('/marketing/report/category-accounts/excel', {
+        responseType: 'blob',
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const stamp = new Date().toISOString().slice(0, 10);
+      link.setAttribute('download', `category_wise_accounts_${stamp}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Accounts Report Generated', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    } catch (err) {
+      console.error('Error generating accounts report:', err);
+      toast.error('Failed to generate accounts report');
+    } finally {
+      setGeneratingAccountsReport(false);
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f5f6f8]">
@@ -173,20 +208,37 @@ export default function ViewDetailsPage() {
               </StatCard>
             </div>
 
-            <button
-              onClick={handleGenerateReport}
-              disabled={generatingReport}
-              className="shrink-0 self-start xl:self-auto xl:min-w-[200px] h-[52px] xl:h-auto xl:min-h-[120px] px-8 bg-[#E53935] hover:bg-[#D32F2F] text-white font-semibold text-base rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
-            >
-              {generatingReport ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Generating...
-                </span>
-              ) : (
-                'Generate Report'
-              )}
-            </button>
+            <div className="flex flex-col gap-3 shrink-0 self-start xl:self-auto xl:min-w-[220px]">
+              <button
+                onClick={handleGenerateReport}
+                disabled={generatingReport}
+                className="h-[52px] xl:min-h-[56px] px-8 bg-[#E53935] hover:bg-[#D32F2F] text-white font-semibold text-base rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+              >
+                {generatingReport ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Generating...
+                  </span>
+                ) : (
+                  'Hierarchy Report'
+                )}
+              </button>
+
+              <button
+                onClick={handleGenerateAccountsReport}
+                disabled={generatingAccountsReport}
+                className="h-[52px] xl:min-h-[56px] px-8 bg-[#1E6B3A] hover:bg-[#185A30] text-white font-semibold text-base rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+              >
+                {generatingAccountsReport ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Generating...
+                  </span>
+                ) : (
+                  'Accounts Report'
+                )}
+              </button>
+            </div>
           </div>
 
           <HomeAnalyticsSection categories={categories} />
