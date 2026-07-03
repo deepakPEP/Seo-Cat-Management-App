@@ -6,6 +6,7 @@ import axiosInstance from '../../../lib/axiosInstance';
 import { useAuth } from '@/components/hooks/useAuth';
 import { toast } from 'react-toastify';
 import { HomeAnalyticsSection } from '@/components/analytics/HomeAnalyticsSection';
+import HierarchySearch from '@/components/analytics/HierarchySearch';
 
 type Category = {
   _id: string;
@@ -178,7 +179,10 @@ export default function ViewDetailsPage() {
         className={`transition-all duration-300 ${collapsed ? 'ml-20' : 'ml-80'} min-h-screen bg-[#f5f6f8]`}
       >
         <div className="max-w-6xl mx-auto px-6 py-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Categories</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <h1 className="text-3xl font-bold text-gray-900">Categories</h1>
+            <HierarchySearch />
+          </div>
 
           <div className="flex flex-col xl:flex-row xl:items-stretch gap-4 mb-8">
             <div className="flex flex-wrap gap-3 flex-1">
@@ -227,7 +231,7 @@ export default function ViewDetailsPage() {
               <button
                 onClick={handleGenerateAccountsReport}
                 disabled={generatingAccountsReport}
-                className="h-[52px] xl:min-h-[56px] px-8 bg-[#1E6B3A] hover:bg-[#185A30] text-white font-semibold text-base rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                className="h-[52px] xl:min-h-[56px] px-8 bg-white text-[#E53935] border border-width-3 border-[#E53935] hover:border-[#D32F2F] font-semibold text-base rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
               >
                 {generatingAccountsReport ? (
                   <span className="flex items-center gap-2">

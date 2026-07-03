@@ -181,22 +181,21 @@ export class SupplierAnalyticsService implements OnModuleInit {
 
     try {
       const tierMap = await this.tierCache.getMap(this.db);
-      let clientRows: Record<string, unknown>[] = [];
-      let productRows: Record<string, unknown>[] = [];
 
-      try {
-        clientRows = await this.runClientTop5(level, parentOid, limit, tierMap);
-      } catch (clientErr) {
-        this.logger.warn(`client top5 failed (level=${level}): ${(clientErr as Error).message}`);
-      }
-
-      if (limit > 0) {
-        try {
-          productRows = await this.runProductTop5(level, parentOid, tierMap);
-        } catch (productErr) {
-          this.logger.warn(`product top5 failed (level=${level}): ${(productErr as Error).message}`);
-        }
-      }
+      // Run the client and product pipelines in parallel so total latency is
+      // max(client, product) instead of the sum (AC-01/AC-02 budget).
+      const [clientRows, productRows] = await Promise.all([
+        this.runClientTop5(level, parentOid, limit, tierMap).catch((clientErr) => {
+          this.logger.warn(`client top5 failed (level=${level}): ${(clientErr as Error).message}`);
+          return [] as Record<string, unknown>[];
+        }),
+        limit > 0
+          ? this.runProductTop5(level, parentOid, tierMap).catch((productErr) => {
+              this.logger.warn(`product top5 failed (level=${level}): ${(productErr as Error).message}`);
+              return [] as Record<string, unknown>[];
+            })
+          : Promise.resolve([] as Record<string, unknown>[]),
+      ]);
 
       const result = this.mergeTop5Results(clientRows, productRows, limit);
       this.logger.log(`top5 level=${level} done in ${Date.now() - started}ms (${result.length} rows)`);
@@ -374,14 +373,15 @@ export class SupplierAnalyticsService implements OnModuleInit {
       matchStages.push({ $match: { status: 'live' } });
     }
 
-    const pipeline = [
+    // Phase 1 — rank nodes by product count only (no per-business array push, so
+    // MongoDB never materialises huge businessIds arrays across all ~17k nodes).
+    const rankPipeline = [
       ...matchStages,
       {
         $addFields: {
           _normId: { $toString: `$${fields.id}` },
           _nodeName: `$${fields.name}`,
           _nodeUniqueId: `$${fields.uniqueId}`,
-          _bizId: { $toString: '$businessOf' },
         },
       },
       { $match: { _normId: { $nin: [null, '', 'null'] } } },
@@ -390,7 +390,6 @@ export class SupplierAnalyticsService implements OnModuleInit {
           _id: '$_normId',
           name: { $first: '$_nodeName' },
           uniqueId: { $first: '$_nodeUniqueId' },
-          businessIds: { $push: '$_bizId' },
           productCount: { $sum: 1 },
         },
       },
@@ -398,22 +397,50 @@ export class SupplierAnalyticsService implements OnModuleInit {
       { $limit: 25 },
     ];
 
+    const ranked = await this.db
+      .collection('liveproducts')
+      .aggregate<{ _id: string; name?: string; uniqueId?: string; productCount: number }>(
+        rankPipeline,
+        AGG_OPTS,
+      )
+      .toArray();
+
+    if (ranked.length === 0) return [];
+
+    const topIds = ranked.map((r) => r._id);
+    const meta = new Map(ranked.map((r) => [r._id, { name: r.name, uniqueId: r.uniqueId }]));
+
+    // Phase 2 — collect owner business ids for ONLY the top nodes, then resolve tiers
+    // in memory. Array push is now limited to a handful of nodes instead of all of them.
+    const breakdownPipeline = [
+      ...matchStages,
+      {
+        $addFields: {
+          _normId: { $toString: `$${fields.id}` },
+          _bizId: { $toString: '$businessOf' },
+        },
+      },
+      { $match: { _normId: { $in: topIds } } },
+      {
+        $group: {
+          _id: '$_normId',
+          businessIds: { $push: '$_bizId' },
+        },
+      },
+    ];
+
     const rows = await this.db
       .collection('liveproducts')
-      .aggregate<{
-        _id: string;
-        name?: string;
-        uniqueId?: string;
-        businessIds: string[];
-      }>(pipeline, AGG_OPTS)
+      .aggregate<{ _id: string; businessIds: string[] }>(breakdownPipeline, AGG_OPTS)
       .toArray();
 
     return rows.map((row) => {
       const counts = countTiersFromBusinessIds(row.businessIds, tierMap);
+      const m = meta.get(row._id);
       return {
         _id: row._id,
-        name: row.name,
-        uniqueId: row.uniqueId,
+        name: m?.name,
+        uniqueId: m?.uniqueId,
         ...toProductCountFields(counts),
       };
     });

@@ -4,6 +4,7 @@ import {
   Post,
   Param,
   Body,
+  Query,
   UseGuards,
   Res,
   HttpStatus,
@@ -77,6 +78,18 @@ export class MarketingController {
       statusCode: HttpStatus.OK,
       message: 'Subcategory product count fetched successfully',
       data: counts,
+    };
+  }
+
+  // Search across categories, subcategories and product categories
+  @Get('search')
+  @Roles('admin', 'category_manager', 'pepagora_manager', 'marketing_team')
+  async searchHierarchy(@Query('q') q: string) {
+    const results = await this.marketingService.searchHierarchy(q ?? '');
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Search results fetched successfully',
+      data: results,
     };
   }
 
@@ -255,7 +268,8 @@ export class MarketingController {
   @Roles('admin', 'category_manager', 'pepagora_manager', 'marketing_team')
   async generateCategoryAccountsReport(@Res() res: Response) {
     try {
-      const rows = await this.marketingService.generateCategoryAccountsReportData();
+      const { rows, categorySummary, totals } =
+        await this.marketingService.generateCategoryAccountsReportData();
 
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'Pepagora Analytics';
@@ -302,7 +316,7 @@ export class MarketingController {
       // Subtitle
       ws.mergeCells(`A2:${lastColLetter}2`);
       const subtitle = ws.getCell('A2');
-      subtitle.value = `Free vs Paid accounts per product category  •  Generated ${new Date().toLocaleString('en-IN')}`;
+      subtitle.value = `Each account counted once (in its first-listed product category) — no duplicates  •  Generated ${new Date().toLocaleString('en-IN')}`;
       subtitle.font = { italic: true, size: 10, color: { argb: 'FF5A6B85' } };
       subtitle.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
       ws.getRow(2).height = 18;
@@ -327,12 +341,7 @@ export class MarketingController {
       headerRow.height = 22;
 
       // Data rows
-      let totalFree = 0;
-      let totalPaid = 0;
       rows.forEach((r, idx) => {
-        totalFree += r.freeAccounts;
-        totalPaid += r.paidAccounts;
-
         const row = ws.addRow([
           r.category,
           r.subCategory,
@@ -362,8 +371,15 @@ export class MarketingController {
         row.getCell(6).font = { bold: true };
       });
 
-      // Totals row
-      const totalRowValues = ['Total', '', '', totalFree, totalPaid, totalFree + totalPaid];
+      // Totals row — sum of all rows = unique accounts (each counted once)
+      const totalRowValues = [
+        'Total (Unique Accounts)',
+        '',
+        '',
+        totals.freeAccounts,
+        totals.paidAccounts,
+        totals.totalAccounts,
+      ];
       const totalRow = ws.addRow(totalRowValues);
       totalRow.height = 20;
       ws.mergeCells(`A${totalRow.number}:C${totalRow.number}`);
@@ -386,17 +402,7 @@ export class MarketingController {
         to: { row: 4 + rows.length, column: lastCol },
       };
 
-      // ─── Sheet 2: summary by category ─────────────────────────────────────
-      const summaryMap = new Map<string, { free: number; paid: number; pcCount: number }>();
-      for (const r of rows) {
-        const key = r.category || 'Uncategorized';
-        const agg = summaryMap.get(key) ?? { free: 0, paid: 0, pcCount: 0 };
-        agg.free += r.freeAccounts;
-        agg.paid += r.paidAccounts;
-        agg.pcCount += 1;
-        summaryMap.set(key, agg);
-      }
-
+      // ─── Sheet 2: summary by category (distinct accounts) ─────────────────
       const sum = workbook.addWorksheet('Summary by Category', {
         views: [{ state: 'frozen', ySplit: 2 }],
       });
@@ -436,13 +442,17 @@ export class MarketingController {
       });
       sumHeaderRow.height = 22;
 
-      const sortedSummary = [...summaryMap.entries()].sort(
-        (a, b) => b[1].paid + b[1].free - (a[1].paid + a[1].free),
-      );
-      sortedSummary.forEach(([category, agg], idx) => {
-        const total = agg.free + agg.paid;
-        const paidPct = total > 0 ? agg.paid / total : 0;
-        const row = sum.addRow([category, agg.pcCount, agg.free, agg.paid, total, paidPct]);
+      categorySummary.forEach((agg, idx) => {
+        const total = agg.totalAccounts;
+        const paidPct = total > 0 ? agg.paidAccounts / total : 0;
+        const row = sum.addRow([
+          agg.category,
+          agg.productCategories,
+          agg.freeAccounts,
+          agg.paidAccounts,
+          total,
+          paidPct,
+        ]);
         row.height = 18;
         const banded = idx % 2 === 1;
         for (let c = 1; c <= 6; c++) {
@@ -458,23 +468,16 @@ export class MarketingController {
         row.getCell(5).font = { bold: true };
       });
 
-      const grandTotal = sortedSummary.reduce(
-        (acc, [, agg]) => {
-          acc.free += agg.free;
-          acc.paid += agg.paid;
-          acc.pc += agg.pcCount;
-          return acc;
-        },
-        { free: 0, paid: 0, pc: 0 },
-      );
-      const gTotal = grandTotal.free + grandTotal.paid;
+      // Grand total = sum of category rows = unique accounts (already deduplicated).
+      const totalPcCount = categorySummary.reduce((acc, a) => acc + a.productCategories, 0);
+      const gTotal = totals.totalAccounts;
       const sumTotalRow = sum.addRow([
-        'Total',
-        grandTotal.pc,
-        grandTotal.free,
-        grandTotal.paid,
+        'Total (Unique Accounts)',
+        totalPcCount,
+        totals.freeAccounts,
+        totals.paidAccounts,
         gTotal,
-        gTotal > 0 ? grandTotal.paid / gTotal : 0,
+        gTotal > 0 ? totals.paidAccounts / gTotal : 0,
       ]);
       sumTotalRow.height = 20;
       for (let c = 1; c <= 6; c++) {

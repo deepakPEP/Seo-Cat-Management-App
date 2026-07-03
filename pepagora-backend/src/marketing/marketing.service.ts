@@ -58,6 +58,21 @@ export type CategoryAccountRow = {
   totalAccounts: number;
 };
 
+export type CategoryAccountSummary = {
+  category: string;
+  productCategories: number;
+  freeAccounts: number;
+  paidAccounts: number;
+  totalAccounts: number;
+};
+
+export type CategoryAccountsReport = {
+  rows: CategoryAccountRow[];
+  categorySummary: CategoryAccountSummary[];
+  /** Deduplicated (distinct) account totals across the whole dataset. */
+  totals: { freeAccounts: number; paidAccounts: number; totalAccounts: number };
+};
+
 @Injectable()
 export class MarketingService {
   private readonly metaDb: Db;
@@ -81,6 +96,66 @@ export class MarketingService {
     }
     
     this.metaDb = client.db('pepagoraDb');
+  }
+
+  private escapeRegex(input: string): string {
+    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * Search categories, subcategories and product categories by name (pepagoraDb).
+   * Case-insensitive, capped per type, used by the view-details search bar.
+   */
+  async searchHierarchy(query: string, limit = 8) {
+    const q = (query ?? '').trim();
+    if (!q) {
+      return { categories: [], subCategories: [], productCategories: [] };
+    }
+
+    const regex = new RegExp(this.escapeRegex(q), 'i');
+    const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
+    const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
+    const productCategoriesCollection =
+      this.metaDb.collection<ProductCategoryDocument>('productcategories');
+
+    const [categories, subcategories, productCategories] = await Promise.all([
+      categoriesCollection
+        .find(
+          { $or: [{ name: regex }, { main_cat_name: regex }] },
+          { projection: { name: 1, main_cat_name: 1 } },
+        )
+        .limit(limit)
+        .toArray(),
+      subcategoriesCollection
+        .find(
+          { $or: [{ name: regex }, { sub_cat_name: regex }] },
+          { projection: { name: 1, sub_cat_name: 1 } },
+        )
+        .limit(limit)
+        .toArray(),
+      productCategoriesCollection
+        .find(
+          { $or: [{ name: regex }, { product_category_name: regex }] },
+          { projection: { name: 1, product_category_name: 1 } },
+        )
+        .limit(limit)
+        .toArray(),
+    ]);
+
+    return {
+      categories: categories.map((c) => ({
+        _id: c._id.toString(),
+        name: this.getCategoryName(c),
+      })),
+      subCategories: subcategories.map((s) => ({
+        _id: s._id.toString(),
+        name: this.getSubcategoryName(s),
+      })),
+      productCategories: productCategories.map((p) => ({
+        _id: p._id.toString(),
+        name: this.getProductCategoryName(p),
+      })),
+    };
   }
 
   private toObjectId(id: string | ObjectId | undefined | null): ObjectId | null {
@@ -602,8 +677,12 @@ export class MarketingService {
    * For every product category, counts the distinct businesses (by createdBy)
    * split into Free vs Paid using users.currentPlan.planNo (planNo === 1 → Free,
    * planNo > 1 → Paid). Resolves the SubCategory and Category names via parentId.
+   *
+   * A business can belong to many product categories, so summing the per-row
+   * counts overcounts accounts. The category summary and grand total therefore
+   * use DISTINCT business sets (deduplicated) so totals reflect real account numbers.
    */
-  async generateCategoryAccountsReportData(): Promise<CategoryAccountRow[]> {
+  async generateCategoryAccountsReportData(): Promise<CategoryAccountsReport> {
     try {
       const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
       const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
@@ -687,26 +766,38 @@ export class MarketingService {
         }
       }
 
-      // 7) assemble rows
+      // 7) assemble rows with GLOBAL deduplication — each account is counted only
+      //    once across the whole report (in the first product category it appears in,
+      //    by product-category _id order). This guarantees no redundancy: the rows,
+      //    the category summary and the grand total all sum to the same unique count.
       const rows: CategoryAccountRow[] = [];
+      const categoryAgg = new Map<
+        string,
+        { name: string; free: number; paid: number; pcCount: number }
+      >();
+      const seen = new Set<string>();
+      let globalFree = 0;
+      let globalPaid = 0;
+
       for (const pc of productCategories) {
         const pcId = pc._id.toString();
-        const usersForPc = pcUsers.get(pcId);
+        const usersForPc = pcUsers.get(pcId) ?? new Set<string>();
 
         let free = 0;
         let paid = 0;
-        if (usersForPc) {
-          for (const userId of usersForPc) {
-            if (!planNoByUser.has(userId)) continue; // user record missing — skip (matches script)
-            const planNo = planNoByUser.get(userId) ?? 1;
-            if (planNo > 1) paid++;
-            else free++;
-          }
+        for (const id of usersForPc) {
+          if (seen.has(id)) continue; // already counted in an earlier row — no redundancy
+          if (!planNoByUser.has(id)) continue; // user record missing — skip (matches script)
+          seen.add(id);
+          const planNo = planNoByUser.get(id) ?? 1;
+          if (planNo > 1) paid++;
+          else free++;
         }
 
         const sub = pc.parentId != null ? subcatById.get(pc.parentId.toString()) : undefined;
         const subCategoryName = sub?.name ?? '';
-        const categoryName = sub?.parentId ? categoryNameById.get(sub.parentId) ?? '' : '';
+        const categoryId = sub?.parentId ?? null;
+        const categoryName = categoryId ? categoryNameById.get(categoryId) ?? '' : '';
 
         rows.push({
           category: categoryName,
@@ -716,9 +807,39 @@ export class MarketingService {
           paidAccounts: paid,
           totalAccounts: free + paid,
         });
+
+        const catKey = categoryId ?? '__uncategorized__';
+        let agg = categoryAgg.get(catKey);
+        if (!agg) {
+          agg = { name: categoryName || 'Uncategorized', free: 0, paid: 0, pcCount: 0 };
+          categoryAgg.set(catKey, agg);
+        }
+        agg.free += free;
+        agg.paid += paid;
+        agg.pcCount += 1;
+
+        globalFree += free;
+        globalPaid += paid;
       }
 
-      return rows;
+      // 8) category summary + grand total (already deduplicated, so everything sums up)
+      const categorySummary: CategoryAccountSummary[] = [...categoryAgg.values()]
+        .map((agg) => ({
+          category: agg.name,
+          productCategories: agg.pcCount,
+          freeAccounts: agg.free,
+          paidAccounts: agg.paid,
+          totalAccounts: agg.free + agg.paid,
+        }))
+        .sort((a, b) => b.totalAccounts - a.totalAccounts);
+
+      const totals = {
+        freeAccounts: globalFree,
+        paidAccounts: globalPaid,
+        totalAccounts: globalFree + globalPaid,
+      };
+
+      return { rows, categorySummary, totals };
     } catch (error) {
       console.error('[Marketing Service] Error generating category accounts report:', error);
       throw new BadRequestException('Failed to generate category accounts report');
