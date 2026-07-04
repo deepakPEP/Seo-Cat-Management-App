@@ -32,9 +32,45 @@ type LiveProductDocument = {
   _id: ObjectId;
   productName?: string;
   liveUrl?: string;
+  status?: string;
   productCategory?: {
-    _id?: ObjectId;
+    _id?: ObjectId | string;
   };
+};
+
+type BusinessProfileAccountDoc = {
+  _id: ObjectId;
+  createdBy?: ObjectId | string;
+  productCategories?: { _id?: ObjectId | string }[];
+};
+
+type UserPlanDoc = {
+  _id: ObjectId | string;
+  currentPlan?: { planNo?: number };
+};
+
+export type CategoryAccountRow = {
+  category: string;
+  subCategory: string;
+  productCategory: string;
+  freeAccounts: number;
+  paidAccounts: number;
+  totalAccounts: number;
+};
+
+export type CategoryAccountSummary = {
+  category: string;
+  productCategories: number;
+  freeAccounts: number;
+  paidAccounts: number;
+  totalAccounts: number;
+};
+
+export type CategoryAccountsReport = {
+  rows: CategoryAccountRow[];
+  categorySummary: CategoryAccountSummary[];
+  /** Deduplicated (distinct) account totals across the whole dataset. */
+  totals: { freeAccounts: number; paidAccounts: number; totalAccounts: number };
 };
 
 @Injectable()
@@ -62,6 +98,66 @@ export class MarketingService {
     this.metaDb = client.db('pepagoraDb');
   }
 
+  private escapeRegex(input: string): string {
+    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * Search categories, subcategories and product categories by name (pepagoraDb).
+   * Case-insensitive, capped per type, used by the view-details search bar.
+   */
+  async searchHierarchy(query: string, limit = 8) {
+    const q = (query ?? '').trim();
+    if (!q) {
+      return { categories: [], subCategories: [], productCategories: [] };
+    }
+
+    const regex = new RegExp(this.escapeRegex(q), 'i');
+    const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
+    const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
+    const productCategoriesCollection =
+      this.metaDb.collection<ProductCategoryDocument>('productcategories');
+
+    const [categories, subcategories, productCategories] = await Promise.all([
+      categoriesCollection
+        .find(
+          { $or: [{ name: regex }, { main_cat_name: regex }] },
+          { projection: { name: 1, main_cat_name: 1 } },
+        )
+        .limit(limit)
+        .toArray(),
+      subcategoriesCollection
+        .find(
+          { $or: [{ name: regex }, { sub_cat_name: regex }] },
+          { projection: { name: 1, sub_cat_name: 1 } },
+        )
+        .limit(limit)
+        .toArray(),
+      productCategoriesCollection
+        .find(
+          { $or: [{ name: regex }, { product_category_name: regex }] },
+          { projection: { name: 1, product_category_name: 1 } },
+        )
+        .limit(limit)
+        .toArray(),
+    ]);
+
+    return {
+      categories: categories.map((c) => ({
+        _id: c._id.toString(),
+        name: this.getCategoryName(c),
+      })),
+      subCategories: subcategories.map((s) => ({
+        _id: s._id.toString(),
+        name: this.getSubcategoryName(s),
+      })),
+      productCategories: productCategories.map((p) => ({
+        _id: p._id.toString(),
+        name: this.getProductCategoryName(p),
+      })),
+    };
+  }
+
   private toObjectId(id: string | ObjectId | undefined | null): ObjectId | null {
     if (!id) return null;
     if (id instanceof ObjectId) return id;
@@ -84,6 +180,66 @@ export class MarketingService {
     return productCategory.name ?? productCategory.product_category_name ?? 'Unnamed Product Category';
   }
 
+  /** parentId may be stored as ObjectId or string in productcategories. */
+  private parentIdFilter(parentId: ObjectId) {
+    const str = parentId.toString();
+    return { $or: [{ parentId }, { parentId: str }] };
+  }
+
+  private parentIdInFilter(parentIds: ObjectId[]) {
+    const variants = parentIds.flatMap((id) => [id, id.toString()]);
+    return { parentId: { $in: variants } };
+  }
+
+  private expandIdVariants(ids: ObjectId[]): (ObjectId | string)[] {
+    return ids.flatMap((id) => [id, id.toString()]);
+  }
+
+  /** Live products only; productCategory._id may be ObjectId or string. */
+  private liveProductCategoryFilter(productCategoryIds: ObjectId[]) {
+    return {
+      status: 'live',
+      'productCategory._id': { $in: this.expandIdVariants(productCategoryIds) },
+    };
+  }
+
+  private matchSingleProductCategoryId(productCategoryId: ObjectId) {
+    const str = productCategoryId.toString();
+    return {
+      status: 'live',
+      $or: [{ 'productCategory._id': productCategoryId }, { 'productCategory._id': str }],
+    };
+  }
+
+  private async aggregateLiveProductCountsByCategory(productCategoryIds: ObjectId[]) {
+    const liveProductsCollection = this.metaDb.collection<LiveProductDocument>('liveproducts');
+    const counts = new Map<string, number>();
+    const samples = new Map<string, string>();
+    if (productCategoryIds.length === 0) return { counts, samples };
+
+    const rows = await liveProductsCollection
+      .aggregate<{ _id: string; count: number; sampleProducts?: string[] }>([
+        { $match: this.liveProductCategoryFilter(productCategoryIds) },
+        { $addFields: { _pcId: { $toString: '$productCategory._id' } } },
+        {
+          $group: {
+            _id: '$_pcId',
+            count: { $sum: 1 },
+            sampleProducts: { $push: { $ifNull: ['$productName', 'Unnamed Product'] } },
+          },
+        },
+      ])
+      .toArray();
+
+    for (const row of rows) {
+      counts.set(row._id, row.count);
+      if (row.sampleProducts) {
+        samples.set(row._id, row.sampleProducts.slice(0, 5).join(', '));
+      }
+    }
+    return { counts, samples };
+  }
+
   // Get counts for dashboard
   async getProductCategoryCount(): Promise<number> {
     try {
@@ -97,7 +253,7 @@ export class MarketingService {
   async getLiveProductsCount(): Promise<number> {
     try {
       const liveProductsCollection = this.metaDb.collection<LiveProductDocument>('liveproducts');
-      return await liveProductsCollection.countDocuments();
+      return await liveProductsCollection.countDocuments({ status: 'live' });
     } catch (error) {
       throw new BadRequestException('Failed to fetch live products count');
     }
@@ -113,7 +269,7 @@ export class MarketingService {
       const [subcategoriesCount, productCategoriesCount, productsCount] = await Promise.all([
         subcategoriesCollection.countDocuments(),
         productCategoriesCollection.countDocuments(),
-        liveProductsCollection.countDocuments(),
+        liveProductsCollection.countDocuments({ status: 'live' }),
       ]);
 
       return {
@@ -151,18 +307,15 @@ export class MarketingService {
 
       // Get all product categories for these subcategories
       const productCategories = subcategoryObjectIds.length
-        ? await productCategoriesCollection
-            .find({ parentId: { $in: subcategoryObjectIds } })
-            .toArray()
+        ? await productCategoriesCollection.find(this.parentIdInFilter(subcategoryObjectIds)).toArray()
         : [];
 
       const productCategoryObjectIds = productCategories.map((pc) => pc._id);
 
-      // Get product count for these product categories
       const productsCount = productCategoryObjectIds.length
-        ? await liveProductsCollection.countDocuments({
-            'productCategory._id': { $in: productCategoryObjectIds },
-          })
+        ? await liveProductsCollection.countDocuments(
+            this.liveProductCategoryFilter(productCategoryObjectIds),
+          )
         : 0;
 
       return {
@@ -189,16 +342,15 @@ export class MarketingService {
 
       // Get all product categories for this subcategory
       const productCategories = await productCategoriesCollection
-        .find({ parentId: subcategoryObjectId })
+        .find(this.parentIdFilter(subcategoryObjectId))
         .toArray();
 
       const productCategoryObjectIds = productCategories.map((pc) => pc._id);
 
-      // Get product count for these product categories
       const productsCount = productCategoryObjectIds.length
-        ? await liveProductsCollection.countDocuments({
-            'productCategory._id': { $in: productCategoryObjectIds },
-          })
+        ? await liveProductsCollection.countDocuments(
+            this.liveProductCategoryFilter(productCategoryObjectIds),
+          )
         : 0;
 
       return {
@@ -292,7 +444,7 @@ export class MarketingService {
       if (!subcategory) throw new BadRequestException('Subcategory not found');
 
       const productCategories = await productCategoriesCollection
-        .find({ parentId: subcategoryObjectId }, { projection: { name: 1 } })
+        .find(this.parentIdFilter(subcategoryObjectId), { projection: { name: 1 } })
         .sort({ name: 1 })
         .toArray();
 
@@ -300,33 +452,8 @@ export class MarketingService {
         mappedChildren: { $in: [subcategory._id.toString()] },
       });
 
-      // OPTIMIZATION: Batch query for product counts using aggregation pipeline
       const productCategoryIds = productCategories.map((pc) => pc._id);
-      const productCountsMap = new Map<string, number>();
-
-      if (productCategoryIds.length > 0) {
-        // Get all product counts in one aggregation query instead of N queries
-        const productCountsAggregation = await liveProductsCollection
-          .aggregate([
-            {
-              $match: {
-                'productCategory._id': { $in: productCategoryIds },
-              },
-            },
-            {
-              $group: {
-                _id: '$productCategory._id',
-                count: { $sum: 1 },
-              },
-            },
-          ])
-          .toArray();
-
-        // Create a map for O(1) lookup
-        for (const result of productCountsAggregation) {
-          productCountsMap.set(result._id.toString(), result.count);
-        }
-      }
+      const { counts: productCountsMap } = await this.aggregateLiveProductCountsByCategory(productCategoryIds);
 
       // Map product categories with pre-fetched counts
       const productCategoriesWithCounts = productCategories.map((pc) => {
@@ -388,10 +515,9 @@ export class MarketingService {
         : null;
 
       const products = await liveProductsCollection
-        .find(
-          { 'productCategory._id': productCategoryObjectId },
-          { projection: { productName: 1, liveUrl: 1 } },
-        )
+        .find(this.matchSingleProductCategoryId(productCategoryObjectId), {
+          projection: { productName: 1, liveUrl: 1 },
+        })
         .sort({ productName: 1 })
         .toArray();
 
@@ -473,40 +599,8 @@ export class MarketingService {
         }
       }
 
-      // OPTIMIZATION: Batch query for product counts using aggregation pipeline
-      const productCountsMap = new Map<string, number>();
-      const sampleProductsMap = new Map<string, string>();
-
-      if (allProductCategoryIds.length > 0) {
-        // Get product counts for all product categories in one query
-        const productCountsAggregation = await liveProductsCollection
-          .aggregate([
-            {
-              $match: {
-                'productCategory._id': { $in: allProductCategoryIds },
-              },
-            },
-            {
-              $group: {
-                _id: '$productCategory._id',
-                count: { $sum: 1 },
-                sampleProducts: {
-                  $push: { $ifNull: ['$productName', 'Unnamed Product'] },
-                },
-              },
-            },
-          ])
-          .toArray();
-
-        // Process aggregation results
-        for (const result of productCountsAggregation) {
-          const productCategoryId = result._id.toString();
-          productCountsMap.set(productCategoryId, result.count);
-          // Get first 5 product names as samples
-          const samples = result.sampleProducts.slice(0, 5);
-          sampleProductsMap.set(productCategoryId, samples.join(', '));
-        }
-      }
+      const { counts: productCountsMap, samples: sampleProductsMap } =
+        await this.aggregateLiveProductCountsByCategory(allProductCategoryIds);
 
       // Build hierarchy with pre-fetched data
       const hierarchy: any[] = [];
@@ -574,6 +668,181 @@ export class MarketingService {
     } catch (error) {
       console.error('[Marketing Service] Error generating Excel report:', error);
       throw new BadRequestException('Failed to generate report');
+    }
+  }
+
+  /**
+   * Category-wise accounts report (port of category_wise_Acct.py).
+   *
+   * For every product category, counts the distinct businesses (by createdBy)
+   * split into Free vs Paid using users.currentPlan.planNo (planNo === 1 → Free,
+   * planNo > 1 → Paid). Resolves the SubCategory and Category names via parentId.
+   *
+   * A business can belong to many product categories, so summing the per-row
+   * counts overcounts accounts. The category summary and grand total therefore
+   * use DISTINCT business sets (deduplicated) so totals reflect real account numbers.
+   */
+  async generateCategoryAccountsReportData(): Promise<CategoryAccountsReport> {
+    try {
+      const categoriesCollection = this.metaDb.collection<CategoryDocument>('categories');
+      const subcategoriesCollection = this.metaDb.collection<SubcategoryDocument>('subcategories');
+      const productCategoriesCollection =
+        this.metaDb.collection<ProductCategoryDocument>('productcategories');
+      const businessProfilesCollection =
+        this.metaDb.collection<BusinessProfileAccountDoc>('businessprofiles');
+      const usersCollection = this.metaDb.collection<UserPlanDoc>('users');
+
+      // 1) categoryId -> name
+      const categories = await categoriesCollection
+        .find({}, { projection: { name: 1, main_cat_name: 1 } })
+        .toArray();
+      const categoryNameById = new Map<string, string>();
+      for (const cat of categories) {
+        categoryNameById.set(cat._id.toString(), this.getCategoryName(cat));
+      }
+
+      // 2) subCategoryId -> { name, parentId }
+      const subcategories = await subcategoriesCollection
+        .find({}, { projection: { name: 1, sub_cat_name: 1, parentId: 1 } })
+        .toArray();
+      const subcatById = new Map<string, { name: string; parentId: string | null }>();
+      for (const sub of subcategories) {
+        subcatById.set(sub._id.toString(), {
+          name: this.getSubcategoryName(sub),
+          parentId: sub.parentId != null ? sub.parentId.toString() : null,
+        });
+      }
+
+      // 3) product categories (stable order by _id, like the Python script)
+      const productCategories = await productCategoriesCollection
+        .find({}, { projection: { name: 1, product_category_name: 1, parentId: 1 } })
+        .sort({ _id: 1 })
+        .toArray();
+
+      // 4) productCategoryId -> Set<createdBy> (distinct businesses per product category)
+      const pcUsers = new Map<string, Set<string>>();
+      const bpCursor = businessProfilesCollection.find(
+        {},
+        { projection: { createdBy: 1, productCategories: 1 } },
+      );
+      for await (const bp of bpCursor) {
+        const createdBy = bp.createdBy;
+        if (!createdBy) continue;
+        const createdByStr = createdBy.toString();
+        const pcs = Array.isArray(bp.productCategories) ? bp.productCategories : [];
+        for (const pc of pcs) {
+          const pcId = pc?._id != null ? pc._id.toString() : null;
+          if (!pcId) continue;
+          let set = pcUsers.get(pcId);
+          if (!set) {
+            set = new Set<string>();
+            pcUsers.set(pcId, set);
+          }
+          set.add(createdByStr);
+        }
+      }
+
+      // 5) gather all referenced user ids
+      const allUserIds = new Set<string>();
+      for (const set of pcUsers.values()) {
+        for (const id of set) allUserIds.add(id);
+      }
+
+      // 6) userId -> planNo (handle _id stored as ObjectId or string)
+      const planNoByUser = new Map<string, number>();
+      if (allUserIds.size > 0) {
+        const idVariants: (ObjectId | string)[] = [];
+        for (const id of allUserIds) {
+          idVariants.push(id);
+          const oid = this.toObjectId(id);
+          if (oid) idVariants.push(oid);
+        }
+        const usersCursor = usersCollection.find(
+          { _id: { $in: idVariants } },
+          { projection: { 'currentPlan.planNo': 1 } },
+        );
+        for await (const user of usersCursor) {
+          planNoByUser.set(user._id.toString(), user.currentPlan?.planNo ?? 1);
+        }
+      }
+
+      // 7) assemble rows with GLOBAL deduplication — each account is counted only
+      //    once across the whole report (in the first product category it appears in,
+      //    by product-category _id order). This guarantees no redundancy: the rows,
+      //    the category summary and the grand total all sum to the same unique count.
+      const rows: CategoryAccountRow[] = [];
+      const categoryAgg = new Map<
+        string,
+        { name: string; free: number; paid: number; pcCount: number }
+      >();
+      const seen = new Set<string>();
+      let globalFree = 0;
+      let globalPaid = 0;
+
+      for (const pc of productCategories) {
+        const pcId = pc._id.toString();
+        const usersForPc = pcUsers.get(pcId) ?? new Set<string>();
+
+        let free = 0;
+        let paid = 0;
+        for (const id of usersForPc) {
+          if (seen.has(id)) continue; // already counted in an earlier row — no redundancy
+          if (!planNoByUser.has(id)) continue; // user record missing — skip (matches script)
+          seen.add(id);
+          const planNo = planNoByUser.get(id) ?? 1;
+          if (planNo > 1) paid++;
+          else free++;
+        }
+
+        const sub = pc.parentId != null ? subcatById.get(pc.parentId.toString()) : undefined;
+        const subCategoryName = sub?.name ?? '';
+        const categoryId = sub?.parentId ?? null;
+        const categoryName = categoryId ? categoryNameById.get(categoryId) ?? '' : '';
+
+        rows.push({
+          category: categoryName,
+          subCategory: subCategoryName,
+          productCategory: this.getProductCategoryName(pc),
+          freeAccounts: free,
+          paidAccounts: paid,
+          totalAccounts: free + paid,
+        });
+
+        const catKey = categoryId ?? '__uncategorized__';
+        let agg = categoryAgg.get(catKey);
+        if (!agg) {
+          agg = { name: categoryName || 'Uncategorized', free: 0, paid: 0, pcCount: 0 };
+          categoryAgg.set(catKey, agg);
+        }
+        agg.free += free;
+        agg.paid += paid;
+        agg.pcCount += 1;
+
+        globalFree += free;
+        globalPaid += paid;
+      }
+
+      // 8) category summary + grand total (already deduplicated, so everything sums up)
+      const categorySummary: CategoryAccountSummary[] = [...categoryAgg.values()]
+        .map((agg) => ({
+          category: agg.name,
+          productCategories: agg.pcCount,
+          freeAccounts: agg.free,
+          paidAccounts: agg.paid,
+          totalAccounts: agg.free + agg.paid,
+        }))
+        .sort((a, b) => b.totalAccounts - a.totalAccounts);
+
+      const totals = {
+        freeAccounts: globalFree,
+        paidAccounts: globalPaid,
+        totalAccounts: globalFree + globalPaid,
+      };
+
+      return { rows, categorySummary, totals };
+    } catch (error) {
+      console.error('[Marketing Service] Error generating category accounts report:', error);
+      throw new BadRequestException('Failed to generate category accounts report');
     }
   }
 }

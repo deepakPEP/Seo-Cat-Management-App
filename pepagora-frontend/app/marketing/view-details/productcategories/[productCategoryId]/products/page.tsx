@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import axiosInstance from "../../../../../../lib/axiosInstance";
 import { useAuth } from "@/components/hooks/useAuth";
 import GoogleAnalyticsCard from "@/components/GoogleAnalyticsCard";
+import AnalyticsBreadcrumb from "@/components/analytics/AnalyticsBreadcrumb";
+import AnalyticsErrorBoundary from "@/components/analytics/AnalyticsErrorBoundary";
+import { SkeletonPanel } from "@/components/analytics/AnalyticsSkeleton";
+
+const TierBreakdownPanel = lazy(() => import("@/components/analytics/TierBreakdownPanel"));
 
 type Product = {
   _id: string;
@@ -30,8 +35,7 @@ type Category = {
 };
 
 export default function ProductsPage() {
-  const { userRole, loading: authLoading } = useAuth();
-  const router = useRouter();
+  const { loading: authLoading } = useAuth();
   const params = useParams();
   const productCategoryId = params.productCategoryId as string;
 
@@ -118,51 +122,30 @@ export default function ProductsPage() {
         <div className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="py-6">
-              <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                <button
-                  onClick={() => router.push("/marketing/view-details")}
-                  className="hover:text-blue-600"
-                >
-                  Categories
-                </button>
-                {category && (
-                  <>
-                    <span>/</span>
-                    <button
-                      onClick={() =>
-                        router.push(
-                          `/marketing/view-details/categories/${category._id}/subcategories`
-                        )
-                      }
-                      className="hover:text-blue-600"
-                    >
-                      {category.name}
-                    </button>
-                  </>
-                )}
-                {subcategory && (
-                  <>
-                    <span>/</span>
-                    <button
-                      onClick={() =>
-                        router.push(
-                          `/marketing/view-details/subcategories/${subcategory._id}/productcategories`
-                        )
-                      }
-                      className="hover:text-blue-600"
-                    >
-                      {subcategory.name}
-                    </button>
-                  </>
-                )}
-                {productCategory && (
-                  <>
-                    <span>/</span>
-                    <span className="text-gray-900">
-                      {productCategory.name}
-                    </span>
-                  </>
-                )}
+              <AnalyticsBreadcrumb
+                segments={[
+                  { label: "Categories", href: "/marketing/view-details" },
+                  ...(category
+                    ? [
+                        {
+                          label: category.name,
+                          href: `/marketing/view-details/categories/${category._id}/subcategories`,
+                        },
+                      ]
+                    : []),
+                  ...(subcategory
+                    ? [
+                        {
+                          label: subcategory.name,
+                          href: `/marketing/view-details/subcategories/${subcategory._id}/productcategories`,
+                        },
+                      ]
+                    : []),
+                  ...(productCategory ? [{ label: productCategory.name }] : []),
+                ]}
+              />
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-800">
+                Product category level — showing this category&apos;s data only. No child levels exist below this point.
               </div>
               <div className="flex items-center justify-between">
                 <div>
@@ -234,42 +217,16 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-            <div className="p-6">
-              {products.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-gray-500">No products found</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <h1 className="text-2xl font-bold text-gray-900 m-2 text-center underline">Products</h1>
-                  {products.map((product) => (
-                    <div
-                      key={product._id}
-                      className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 hover:cursor-pointer transition-all duration-200"
-                    >
-                      {product.liveUrl ? (
-                        <a 
-                          href={`https://www.pepagora.com/en/p/${product.liveUrl}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-lg font-medium text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {product.productName}
-                        </a>
-                      ) : (
-                        <span className="text-lg font-medium text-gray-900">
-                          {product.productName}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <AnalyticsErrorBoundary>
+            <Suspense fallback={<SkeletonPanel />}>
+              <TierBreakdownPanel
+                nodeType="product_category"
+                nodeId={productCategoryId}
+                title={`${productCategory?.name ?? "Product Category"} — Client & Product Breakdown`}
+              />
+            </Suspense>
+          </AnalyticsErrorBoundary>
         </div>
       </div>
     </>

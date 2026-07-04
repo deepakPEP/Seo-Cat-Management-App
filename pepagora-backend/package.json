@@ -17,7 +17,13 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "schema:audit": "ts-node scripts/schema-audit.ts",
+    "validate:data-quality": "ts-node scripts/validate-data-quality.ts",
+    "analytics:indexes": "ts-node scripts/create-analytics-indexes.ts",
+    "analytics:validate-pipelines": "ts-node scripts/validate-analytics-pipelines.ts",
+    "k6:smoke": "k6 run k6/analytics-smoke.test.js",
+    "k6:speed": "k6 run k6/analytics-speed.test.js"
   },
   "dependencies": {
     "@google-analytics/data": "^5.2.1",

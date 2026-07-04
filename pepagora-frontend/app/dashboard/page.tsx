@@ -81,11 +81,14 @@ const fetch = async () => {
     setLoading(true);
 
     try {
-      // Categories are readable by all roles
-      const categoriesRes = await axiosInstance.get('/categories');
-      const data1 = Array.isArray(categoriesRes.data?.data?.data)
-        ? categoriesRes.data.data.data
-        : [];
+      // Use the marketing (pepagoraDb) source so counts match /marketing/view-details
+      const categoriesRes = await axiosInstance.get('/marketing/categories');
+      const responseData = categoriesRes.data?.data || {};
+      const data1 = Array.isArray(responseData?.data)
+        ? responseData.data
+        : Array.isArray(responseData)
+          ? responseData
+          : [];
       setCategories(data1);
     } catch (err) {
       setCategories([]);
@@ -116,9 +119,10 @@ const fetch = async () => {
     }
 
     try {
-      const res = await axiosInstance.get('/subcategories/count');
-      const count = res.data?.data?.count ?? 0;
-      setSubCategoryCount(count);
+      // pepagoraDb counts (same source as /marketing/view-details)
+      const res = await axiosInstance.get('/marketing/counts/all');
+      const countsData = res.data?.data?.data || res.data?.data || {};
+      setSubCategoryCount(countsData.subcategoriesCount ?? 0);
     } catch (err) {
       setSubCategoryCount(0);
     }
